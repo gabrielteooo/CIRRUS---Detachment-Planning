@@ -1,17 +1,20 @@
-import type { DetachmentPlan } from '../types/detachment';
+import type { PlatformPlan } from '../types/detachment';
 import { L_SERIES_TEMPLATE, L_SERIES_VERSION_IDS } from './lSeriesTemplate';
 
-export const MOCK_PLANS: DetachmentPlan[] = [
+export const MOCK_PLANS: PlatformPlan[] = [
   {
     id: 'plan-001',
-    name: 'Exercise Falcon 2026',
+    detachmentId: 'det-001',
     platform: 'F-16',
-    variant: 'D',
-    lSeriesVersion: 'L-F16-2026-TEMPLATE',
-    parameterLabel: 'Flying hours',
-    parameterValue: '200 hrs',
+    detachmentType: 'Long',
     needByDate: '2026-03-01',
-    detachmentDate: '2026-03-15',
+    variantRows: [
+      {
+        variant: 'D',
+        lSeriesVersion: 'L-F16-2026-TEMPLATE',
+        parameterTier: 200,
+      },
+    ],
     status: 'Partially Approved',
     fillRatePercent: 94,
     shortfallCount: 8,
@@ -22,34 +25,18 @@ export const MOCK_PLANS: DetachmentPlan[] = [
     lastUpdated: '2026-07-28T09:30:00',
   },
   {
-    id: 'plan-003',
-    name: 'Detachment Alpha — F-16',
-    platform: 'F-16',
-    variant: 'D+',
-    lSeriesVersion: 'L-F16-2026-TEMPLATE',
-    parameterLabel: 'Flying hours',
-    parameterValue: '100 hrs',
-    needByDate: '2026-05-01',
-    detachmentDate: '2026-05-20',
-    status: 'Approved',
-    fillRatePercent: 100,
-    shortfallCount: 0,
-    deviationCount: 2,
-    cannibalisationCount: 1,
-    createdBy: 'planner-1',
-    createdByName: 'John Doe',
-    lastUpdated: '2026-07-25T11:00:00',
-  },
-  {
     id: 'plan-002',
-    name: 'Operation Lift 2026',
+    detachmentId: 'det-002',
     platform: 'CH-47',
-    variant: 'F',
-    lSeriesVersion: 'L-CH47-2026-TEMPLATE',
-    parameterLabel: 'Aircraft count',
-    parameterValue: '4 aircraft',
+    detachmentType: 'Short',
     needByDate: '2026-04-10',
-    detachmentDate: '2026-04-25',
+    variantRows: [
+      {
+        variant: 'F',
+        lSeriesVersion: 'L-CH47-2026-TEMPLATE',
+        parameterTier: 4,
+      },
+    ],
     status: 'Draft',
     fillRatePercent: 72,
     shortfallCount: 12,
@@ -60,34 +47,94 @@ export const MOCK_PLANS: DetachmentPlan[] = [
     lastUpdated: '2026-07-27T14:15:00',
   },
   {
-    id: 'plan-006',
-    name: 'Detachment Bravo — CH-47',
-    platform: 'CH-47',
-    variant: 'D',
-    lSeriesVersion: 'L-CH47-2026-TEMPLATE',
-    parameterLabel: 'Aircraft count',
-    parameterValue: '2 aircraft',
+    id: 'plan-003',
+    detachmentId: 'det-003',
+    platform: 'F-16',
+    detachmentType: 'Short',
+    needByDate: '2026-05-01',
+    variantRows: [
+      {
+        variant: 'D+',
+        lSeriesVersion: 'L-F16-2026-TEMPLATE',
+        parameterTier: 100,
+      },
+    ],
+    status: 'Approved',
+    fillRatePercent: 100,
+    shortfallCount: 0,
+    deviationCount: 2,
+    cannibalisationCount: 1,
+    createdBy: 'planner-1',
+    createdByName: 'John Doe',
+    lastUpdated: '2026-07-25T11:00:00',
+  },
+  {
+    id: 'plan-joint-f16',
+    detachmentId: 'det-joint',
+    platform: 'F-16',
+    detachmentType: 'Long Route Nav',
     needByDate: '2026-06-01',
-    detachmentDate: '2026-06-18',
+    variantRows: [
+      {
+        variant: 'D',
+        lSeriesVersion: 'L-F16-2026-TEMPLATE',
+        parameterTier: 200,
+      },
+      {
+        variant: 'D+',
+        lSeriesVersion: 'L-F16-2026-TEMPLATE',
+        parameterTier: 300,
+      },
+    ],
+    status: 'Partially Approved',
+    fillRatePercent: 89,
+    shortfallCount: 5,
+    deviationCount: 2,
+    cannibalisationCount: 1,
+    createdBy: 'planner-1',
+    createdByName: 'John Doe',
+    lastUpdated: '2026-07-26T12:00:00',
+  },
+  {
+    id: 'plan-joint-ch47',
+    detachmentId: 'det-joint',
+    platform: 'CH-47',
+    detachmentType: 'Near Sail',
+    needByDate: '2026-06-01',
+    variantRows: [
+      {
+        variant: 'D',
+        lSeriesVersion: 'L-CH47-2026-TEMPLATE',
+        parameterTier: 2,
+      },
+      {
+        variant: 'F',
+        lSeriesVersion: 'L-CH47-2026-TEMPLATE',
+        parameterTier: 4,
+      },
+    ],
     status: 'Draft',
-    fillRatePercent: 88,
-    shortfallCount: 3,
-    deviationCount: 1,
+    fillRatePercent: 78,
+    shortfallCount: 6,
+    deviationCount: 0,
     cannibalisationCount: 0,
     createdBy: 'planner-2',
     createdByName: 'Jane Smith',
-    lastUpdated: '2026-07-26T10:00:00',
+    lastUpdated: '2026-07-26T12:00:00',
   },
   {
     id: 'plan-004',
-    name: 'Exercise Eagle 2025',
+    detachmentId: 'det-004',
     platform: 'F-16',
-    variant: 'C',
-    lSeriesVersion: 'L-F16-2026-TEMPLATE',
-    parameterLabel: 'Flying hours',
-    parameterValue: '300 hrs',
+    detachmentType: 'Long',
     needByDate: '2025-08-01',
-    detachmentDate: '2025-08-15',
+    variantRows: [
+      {
+        variant: 'C',
+        lSeriesVersion: 'L-F16-2026-TEMPLATE',
+        parameterTier: 300,
+      },
+    ],
     status: 'Approved',
     fillRatePercent: 100,
     shortfallCount: 0,
@@ -99,14 +146,17 @@ export const MOCK_PLANS: DetachmentPlan[] = [
   },
   {
     id: 'plan-005',
-    name: 'Operation Chinook 2025',
+    detachmentId: 'det-005',
     platform: 'CH-47',
-    variant: 'F',
-    lSeriesVersion: 'L-CH47-2026-TEMPLATE',
-    parameterLabel: 'Aircraft count',
-    parameterValue: '2 aircraft',
+    detachmentType: 'Short',
     needByDate: '2025-11-01',
-    detachmentDate: '2025-11-18',
+    variantRows: [
+      {
+        variant: 'F',
+        lSeriesVersion: 'L-CH47-2026-TEMPLATE',
+        parameterTier: 2,
+      },
+    ],
     status: 'Approved',
     fillRatePercent: 96,
     shortfallCount: 0,
@@ -117,15 +167,40 @@ export const MOCK_PLANS: DetachmentPlan[] = [
     lastUpdated: '2025-11-20T16:45:00',
   },
   {
+    id: 'plan-006',
+    detachmentId: 'det-006',
+    platform: 'CH-47',
+    detachmentType: 'Far Sail',
+    needByDate: '2026-06-01',
+    variantRows: [
+      {
+        variant: 'D',
+        lSeriesVersion: 'L-CH47-2026-TEMPLATE',
+        parameterTier: 2,
+      },
+    ],
+    status: 'Draft',
+    fillRatePercent: 88,
+    shortfallCount: 3,
+    deviationCount: 1,
+    cannibalisationCount: 0,
+    createdBy: 'planner-2',
+    createdByName: 'Jane Smith',
+    lastUpdated: '2026-07-26T10:00:00',
+  },
+  {
     id: 'plan-007',
-    name: 'Exercise Talon 2025',
+    detachmentId: 'det-007',
     platform: 'F-16',
-    variant: 'D',
-    lSeriesVersion: 'L-F16-2026-TEMPLATE',
-    parameterLabel: 'Flying hours',
-    parameterValue: '200 hrs',
+    detachmentType: 'Long',
     needByDate: '2025-06-01',
-    detachmentDate: '2025-06-20',
+    variantRows: [
+      {
+        variant: 'D',
+        lSeriesVersion: 'L-F16-2026-TEMPLATE',
+        parameterTier: 200,
+      },
+    ],
     status: 'Approved',
     fillRatePercent: 98,
     shortfallCount: 0,
@@ -137,14 +212,17 @@ export const MOCK_PLANS: DetachmentPlan[] = [
   },
   {
     id: 'plan-008',
-    name: 'Detachment Charlie — F-16',
+    detachmentId: 'det-008',
     platform: 'F-16',
-    variant: 'D+',
-    lSeriesVersion: 'L-F16-D+-2025-A',
-    parameterLabel: 'Flying hours',
-    parameterValue: '400 hrs',
+    detachmentType: 'Long Route Nav',
     needByDate: '2025-04-01',
-    detachmentDate: '2025-04-18',
+    variantRows: [
+      {
+        variant: 'D+',
+        lSeriesVersion: 'L-F16-D+-2025-A',
+        parameterTier: 400,
+      },
+    ],
     status: 'Approved',
     fillRatePercent: 100,
     shortfallCount: 0,
@@ -156,14 +234,17 @@ export const MOCK_PLANS: DetachmentPlan[] = [
   },
   {
     id: 'plan-009',
-    name: 'Operation Heavy Lift 2025',
+    detachmentId: 'det-009',
     platform: 'CH-47',
-    variant: 'D',
-    lSeriesVersion: 'L-CH47-2026-TEMPLATE',
-    parameterLabel: 'Aircraft count',
-    parameterValue: '3 aircraft',
+    detachmentType: 'Near Sail',
     needByDate: '2025-09-01',
-    detachmentDate: '2025-09-15',
+    variantRows: [
+      {
+        variant: 'D',
+        lSeriesVersion: 'L-CH47-2026-TEMPLATE',
+        parameterTier: 3,
+      },
+    ],
     status: 'Approved',
     fillRatePercent: 95,
     shortfallCount: 0,
@@ -175,14 +256,17 @@ export const MOCK_PLANS: DetachmentPlan[] = [
   },
   {
     id: 'plan-010',
-    name: 'Exercise Strike 2025',
+    detachmentId: 'det-010',
     platform: 'F-16',
-    variant: 'C',
-    lSeriesVersion: 'L-F16-2026-TEMPLATE',
-    parameterLabel: 'Flying hours',
-    parameterValue: '100 hrs',
+    detachmentType: 'Short',
     needByDate: '2025-02-01',
-    detachmentDate: '2025-02-14',
+    variantRows: [
+      {
+        variant: 'C',
+        lSeriesVersion: 'L-F16-2026-TEMPLATE',
+        parameterTier: 100,
+      },
+    ],
     status: 'Approved',
     fillRatePercent: 100,
     shortfallCount: 0,
@@ -194,14 +278,17 @@ export const MOCK_PLANS: DetachmentPlan[] = [
   },
   {
     id: 'plan-011',
-    name: 'Detachment Delta — CH-47',
+    detachmentId: 'det-011',
     platform: 'CH-47',
-    variant: 'F',
-    lSeriesVersion: 'L-CH47-2026-TEMPLATE',
-    parameterLabel: 'Aircraft count',
-    parameterValue: '5 aircraft',
+    detachmentType: 'Far Sail',
     needByDate: '2025-07-01',
-    detachmentDate: '2025-07-22',
+    variantRows: [
+      {
+        variant: 'F',
+        lSeriesVersion: 'L-CH47-2026-TEMPLATE',
+        parameterTier: 5,
+      },
+    ],
     status: 'Approved',
     fillRatePercent: 92,
     shortfallCount: 0,
@@ -213,14 +300,17 @@ export const MOCK_PLANS: DetachmentPlan[] = [
   },
   {
     id: 'plan-012',
-    name: 'Exercise Vanguard 2024',
+    detachmentId: 'det-012',
     platform: 'F-16',
-    variant: 'D',
-    lSeriesVersion: 'L-F16-2026-TEMPLATE',
-    parameterLabel: 'Flying hours',
-    parameterValue: '300 hrs',
+    detachmentType: 'Long',
     needByDate: '2024-10-01',
-    detachmentDate: '2024-10-25',
+    variantRows: [
+      {
+        variant: 'D',
+        lSeriesVersion: 'L-F16-2026-TEMPLATE',
+        parameterTier: 300,
+      },
+    ],
     status: 'Approved',
     fillRatePercent: 97,
     shortfallCount: 0,
@@ -275,4 +365,24 @@ export function fillRateColor(percent: number): string {
   if (percent >= 95) return '#00636a';
   if (percent >= 80) return '#d48806';
   return '#cf1322';
+}
+
+export function aggregateDetachmentStatus(plans: PlatformPlan[]): PlatformPlan['status'] {
+  if (plans.length === 0) return 'Draft';
+  if (plans.every((p) => p.status === 'Approved')) return 'Approved';
+  if (plans.some((p) => p.status === 'Partially Approved')) return 'Partially Approved';
+  return 'Draft';
+}
+
+export function aggregateFillRate(plans: PlatformPlan[]): number {
+  if (plans.length === 0) return 0;
+  return Math.round(plans.reduce((sum, p) => sum + p.fillRatePercent, 0) / plans.length);
+}
+
+export function aggregateShortfalls(plans: PlatformPlan[]): number {
+  return plans.reduce((sum, p) => sum + p.shortfallCount, 0);
+}
+
+export function aggregateDeviations(plans: PlatformPlan[]): number {
+  return plans.reduce((sum, p) => sum + p.deviationCount, 0);
 }

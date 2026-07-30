@@ -20,6 +20,7 @@ export interface AcceptShortfallAction {
   qty: number;
   remarks: string;
   approved: boolean;
+  targetNsn?: string;
 }
 
 export interface WaitShortfallAction {
@@ -28,6 +29,7 @@ export interface WaitShortfallAction {
   repairComponentRef: string;
   needByDate: string;
   approved: boolean;
+  targetNsn?: string;
 }
 
 export interface CannibaliseShortfallAction {
@@ -37,12 +39,28 @@ export interface CannibaliseShortfallAction {
   workCentreComments: string;
   confirmedWithWorkCentre: boolean;
   approved: boolean;
+  /** Interchangeable group: which member NSN is being topped up. */
+  targetNsn?: string;
 }
 
 export type ShortfallAction =
   | AcceptShortfallAction
   | WaitShortfallAction
   | CannibaliseShortfallAction;
+
+export interface InterchangeableMember {
+  nsn: string;
+  mpn: string;
+  description: string;
+  availableQty: number;
+  inventory: InventoryItem[];
+  isPrimary?: boolean;
+}
+
+export interface ToBringAllocation {
+  nsn: string;
+  qty: number;
+}
 
 export interface PlanLine {
   id: string;
@@ -56,6 +74,12 @@ export interface PlanLine {
   deviationReason?: DeviationReason;
   deviationRemarks?: string;
   deviationApproved?: boolean;
+  /** User-added NSN for exercise needs; not from L-series template. */
+  isAddedNsn?: boolean;
+  interchangeableMembers?: InterchangeableMember[];
+  toBringAllocation?: ToBringAllocation[];
+  /** Default member NSN to top up when resolving group shortfall. */
+  shortfallTargetNsn?: string;
 }
 
 export interface RepairEddOption {
@@ -72,7 +96,7 @@ export function formatLineStatus(status: LineStatus): string {
 
 export function getLineStatus(line: PlanLine): LineStatus {
   if (line.availableQty < line.requiredQty) return 'Shortfall';
-  if (line.toBringQty > line.requiredQty) return 'Deviation';
+  if (line.isAddedNsn || line.toBringQty > line.requiredQty) return 'Deviation';
   return 'Met';
 }
 
@@ -118,7 +142,48 @@ export function formatShortfallActions(actions: ShortfallAction[]): string {
     wait: 'Wait (expedite repair/new buys)',
     cannibalise: 'Cannibalise',
   };
-  return actions.map((a) => `${labels[a.type]} (${a.qty})`).join(', ') || '—';
+  return (
+    actions
+      .map((a) => {
+        const suffix = a.targetNsn ? ` — ${a.targetNsn}` : '';
+        return `${labels[a.type]} (${a.qty})${suffix}`;
+      })
+      .join(', ') || '—'
+  );
+}
+
+export function isInterchangeableLine(line: PlanLine): boolean {
+  return (line.interchangeableMembers?.length ?? 0) > 0;
+}
+
+export function getPrimaryMemberNsn(line: PlanLine): string | undefined {
+  return (
+    line.interchangeableMembers?.find((member) => member.isPrimary)?.nsn ??
+    line.interchangeableMembers?.[0]?.nsn
+  );
+}
+
+export function getGroupAvailableQty(line: PlanLine): number {
+  if (isInterchangeableLine(line)) {
+    return line.interchangeableMembers!.reduce((sum, member) => sum + member.availableQty, 0);
+  }
+  return line.availableQty;
+}
+
+export function sumToBringAllocation(allocation: ToBringAllocation[] | undefined): number {
+  return allocation?.reduce((sum, item) => sum + item.qty, 0) ?? 0;
+}
+
+export function formatToBringAllocation(line: PlanLine): string {
+  if (!line.toBringAllocation?.length) return '—';
+  const labels = line.toBringAllocation
+    .filter((item) => item.qty > 0)
+    .map((item) => {
+      const member = line.interchangeableMembers?.find((m) => m.nsn === item.nsn);
+      const label = member?.nsn.split('-').pop() ?? item.nsn;
+      return `${label}×${item.qty}`;
+    });
+  return labels.length > 0 ? labels.join(', ') : '—';
 }
 
 export function allShortfallActionsApproved(actions: ShortfallAction[]): boolean {
@@ -128,7 +193,10 @@ export function allShortfallActionsApproved(actions: ShortfallAction[]): boolean
 export function lineNeedsApproval(line: PlanLine): boolean {
   const status = getLineStatus(line);
   if (status === 'Shortfall') return line.shortfallActions.length > 0;
-  if (status === 'Deviation') return line.toBringQty > line.requiredQty;
+  if (status === 'Deviation') {
+    if (line.isAddedNsn) return true;
+    return line.toBringQty > line.requiredQty;
+  }
   return false;
 }
 

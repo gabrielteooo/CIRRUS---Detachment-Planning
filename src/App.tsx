@@ -2,6 +2,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { ConfigProvider } from 'antd';
 import AppShell from './components/layout/AppShell';
 import PlanListPage from './pages/PlanListPage';
+import DetachmentDetailsPage from './pages/DetachmentDetailsPage';
 import PlanDetailsPage from './pages/PlanDetailsPage';
 import { AppProvider } from './context/AppContext';
 
@@ -48,7 +49,8 @@ export default function App() {
             <Route element={<AppShell />}>
               <Route path="/" element={<Navigate to="/detachment-planning" replace />} />
               <Route path="/detachment-planning" element={<PlanListPage />} />
-              <Route path="/detachment-planning/:planId" element={<PlanDetailsPage />} />
+              <Route path="/detachment-planning/:detachmentId" element={<DetachmentDetailsPage />} />
+              <Route path="/detachment-planning/plan/:planId" element={<PlanDetailsPage />} />
             </Route>
           </Routes>
         </BrowserRouter>

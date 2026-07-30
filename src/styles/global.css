@@ -75,6 +75,43 @@ body {
   color: #000000 !important;
 }
 
+.lseries-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.add-nsn-drawer .ant-drawer-footer {
+  background: #fafafa;
+  border-top: 1px solid #f0f0f0;
+  padding: 12px 24px;
+}
+
+.inventory-drawer-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.inventory-drawer-summary-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.inventory-drawer-summary-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.inventory-drawer-summary-label {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
 .summary-collapse-shortfall,
 .summary-collapse-deviation {
   background: transparent;
@@ -137,6 +174,12 @@ body {
   table-layout: fixed;
 }
 
+.available-qty-link {
+  text-decoration: underline !important;
+  text-underline-offset: 2px;
+  font-weight: 600;
+}
+
 /* Primary brand colour for interactive controls */
 .ant-btn-primary {
   background-color: #00636a !important;
@@ -183,6 +226,100 @@ body {
   text-align: center;
 }
 
+.edit-line-qty-panel {
+  background: #f5f8f8;
+  border: 2px solid #00636a;
+  border-radius: 8px;
+  padding: 16px 20px;
+  margin-bottom: 24px;
+}
+
+.edit-line-qty-panel-title {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 15px;
+}
+
+.edit-line-qty-panel-subtitle {
+  display: block;
+  margin-bottom: 16px;
+  font-size: 13px;
+}
+
+.edit-line-qty-reference {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.edit-line-qty-stat {
+  background: #fff;
+  border: 1px solid #e8eded;
+  border-radius: 6px;
+  padding: 12px 14px;
+  text-align: center;
+}
+
+.edit-line-qty-stat--warning {
+  border-color: #ffd591;
+  background: #fffbe6;
+}
+
+.edit-line-qty-stat--success {
+  border-color: #b7eb8f;
+  background: #f6ffed;
+}
+
+.edit-line-qty-stat-label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(0, 0, 0, 0.45);
+}
+
+.edit-line-qty-stat-value {
+  display: block;
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: rgba(0, 0, 0, 0.88);
+}
+
+.edit-line-to-bring-field {
+  margin-bottom: 0 !important;
+}
+
+.edit-line-to-bring-field .ant-form-item-label > label {
+  font-weight: 600;
+}
+
+.edit-line-type-section {
+  margin-bottom: 20px;
+}
+
+.interchangeable-allocation-panel {
+  background: #fff;
+  border: 1px solid #e8eded;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 24px;
+}
+
+.interchangeable-allocation-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  background: #fafafa;
+  border: 1px solid #f0f0f0;
+  border-radius: 6px;
+}
+
 .shortfall-resolution-panel {
   background: #fff2f0;
   border: 2px solid #ffccc7;
@@ -194,16 +331,34 @@ body {
   width: 100%;
 }
 
-.shortfall-action-checkboxes .ant-checkbox-wrapper {
+.shortfall-action-row {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   padding: 10px 12px;
   background: #fff;
   border: 1px solid #ffccc7;
   border-radius: 6px;
   width: 100%;
+}
+
+.shortfall-action-row--selected {
+  border-left: 3px solid #cf1322;
+}
+
+.shortfall-action-row .ant-checkbox-wrapper {
+  flex: 1;
+  align-items: center;
   margin-inline-start: 0 !important;
   font-weight: 500;
+}
+
+.shortfall-action-row-qty {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 .shortfall-action-card {

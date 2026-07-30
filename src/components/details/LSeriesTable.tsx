@@ -1,12 +1,15 @@
-import { useMemo, useState } from 'react';
-import { Button, Input, Select, Table, Tag, Typography } from 'antd';
-import { SearchOutlined } from '@ant-design/icons';
+import { useEffect, useMemo, useState } from 'react';
+import { Button, Input, Popconfirm, Select, Space, Table, Tag, Typography } from 'antd';
+import { PlusOutlined, SearchOutlined } from '@ant-design/icons';
 import type { PlanLine } from '../../types/planLine';
 import { formatLineStatus, getLineStatus } from '../../types/planLine';
+import type { Platform } from '../../types/detachment';
 import {
   getNsnMpnDescriptionColumns,
+  getPlatformVariantColumn,
   getRequiredColumn,
   getAvailableColumn,
+  getAvailableColumnLinkRenderer,
   getToBringColumn,
   DETACHMENT_TABLE_LAYOUT,
   DETACHMENT_TABLE_SCROLL_X,
@@ -14,9 +17,13 @@ import {
 
 interface LSeriesTableProps {
   lines: PlanLine[];
+  platform: Platform;
+  variant: string;
   viewOnly: boolean;
   onEditLine: (line: PlanLine) => void;
   onViewInventory: (line: PlanLine) => void;
+  onAddNsn?: () => void;
+  onDeleteLine?: (line: PlanLine) => void;
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -25,17 +32,35 @@ const STATUS_COLORS: Record<string, string> = {
   Shortfall: 'error',
 };
 
+function sortLinesForDisplay(lines: PlanLine[]): PlanLine[] {
+  const added = lines.filter((line) => line.isAddedNsn);
+  const template = lines.filter((line) => !line.isAddedNsn);
+  return [...added, ...template];
+}
+
 export default function LSeriesTable({
   lines,
+  platform,
+  variant,
   viewOnly,
   onEditLine,
   onViewInventory,
+  onAddNsn,
+  onDeleteLine,
 }: LSeriesTableProps) {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [page, setPage] = useState(1);
+  const addedCount = lines.filter((line) => line.isAddedNsn).length;
+
+  useEffect(() => {
+    setPage(1);
+  }, [addedCount]);
+
+  const sortedLines = useMemo(() => sortLinesForDisplay(lines), [lines]);
 
   const filtered = useMemo(() => {
-    let result = lines;
+    let result = sortedLines;
     if (statusFilter !== 'all') {
       result = result.filter((l) => getLineStatus(l) === statusFilter);
     }
@@ -48,16 +73,13 @@ export default function LSeriesTable({
       );
     }
     return result;
-  }, [lines, search, statusFilter]);
+  }, [sortedLines, search, statusFilter]);
 
   const columns = [
     ...getNsnMpnDescriptionColumns<PlanLine>(),
+    getPlatformVariantColumn<PlanLine>(platform, variant),
     getRequiredColumn<PlanLine>(),
-    getAvailableColumn<PlanLine>((v, record) => (
-      <Button type="link" size="small" style={{ padding: 0 }} onClick={() => onViewInventory(record)}>
-        {v}
-      </Button>
-    )),
+    getAvailableColumn<PlanLine>(getAvailableColumnLinkRenderer(onViewInventory)),
     getToBringColumn<PlanLine>(),
     {
       title: 'Status',
@@ -71,26 +93,51 @@ export default function LSeriesTable({
     {
       title: 'Action',
       key: 'action',
-      width: 80,
-      render: (_: unknown, record: PlanLine) =>
-        !viewOnly ? (
-          <Button type="link" size="small" onClick={() => onEditLine(record)}>
-            Edit
-          </Button>
-        ) : null,
+      width: 120,
+      render: (_: unknown, record: PlanLine) => {
+        if (viewOnly) return null;
+
+        return (
+          <Space size={4}>
+            <Button type="link" size="small" onClick={() => onEditLine(record)}>
+              Edit
+            </Button>
+            {record.isAddedNsn && onDeleteLine && (
+              <Popconfirm
+                title="Remove this NSN from the plan?"
+                okText="Delete"
+                cancelText="Cancel"
+                onConfirm={() => onDeleteLine(record)}
+              >
+                <Button type="link" size="small" danger>
+                  Delete
+                </Button>
+              </Popconfirm>
+            )}
+          </Space>
+        );
+      },
     },
   ];
 
   return (
     <div className="lseries-section">
-      <Typography.Title
-        level={5}
-        className="lseries-section-title"
-        style={{ marginTop: 0, marginBottom: 12, color: '#000000', fontWeight: 600 }}
-      >
-        Detachment Components
-      </Typography.Title>
-      <div style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
+      <div className="lseries-section-header">
+        <Typography.Title
+          level={5}
+          className="lseries-section-title"
+          style={{ marginTop: 0, marginBottom: 0, color: '#000000', fontWeight: 600 }}
+        >
+          Detachment Components
+        </Typography.Title>
+        {!viewOnly && onAddNsn && (
+          <Button type="primary" icon={<PlusOutlined />} onClick={onAddNsn}>
+            Add NSN
+          </Button>
+        )}
+      </div>
+
+      <div style={{ display: 'flex', gap: 12, marginTop: 12, marginBottom: 12 }}>
         <Input
           placeholder="Search components"
           prefix={<SearchOutlined />}
@@ -116,7 +163,12 @@ export default function LSeriesTable({
           dataSource={filtered}
           columns={columns}
           rowKey="id"
-          pagination={{ pageSize: 10, showSizeChanger: false }}
+          pagination={{
+            current: page,
+            pageSize: 10,
+            showSizeChanger: false,
+            onChange: setPage,
+          }}
           size="middle"
           tableLayout={DETACHMENT_TABLE_LAYOUT}
           scroll={{ x: DETACHMENT_TABLE_SCROLL_X }}

@@ -6,9 +6,18 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import { MOCK_DETACHMENTS } from '../data/mockDetachments';
 import { MOCK_PLANS } from '../data/mockPlans';
 import { getDefaultPlanLines } from '../data/mockPlanLines';
-import type { DetachmentPlan, Platform, User, UserRole } from '../types/detachment';
+import type {
+  Detachment,
+  Platform,
+  PlatformPlan,
+  PlanVariantRow,
+  User,
+  UserRole,
+  DetachmentType,
+} from '../types/detachment';
 import { DIRECTOR_USER, PLANNER_USER } from '../types/detachment';
 import type { PlanLine } from '../types/planLine';
 import {
@@ -19,43 +28,43 @@ import {
   countShortfalls,
 } from '../types/planLine';
 import { getDefaultPlanLinesForPlan } from '../utils/generatePlanLines';
-import { L_SERIES_VERSION_IDS } from '../data/lSeriesTemplate';
-import { L_SERIES_TEMPLATE } from '../data/lSeriesTemplate';
 import { isPastDetachment } from '../utils/planUtils';
+import { getPlansForDetachment } from '../utils/planUtils';
 
 interface AppContextValue {
   role: UserRole;
   setRole: (role: UserRole) => void;
   currentUser: User;
-  plans: DetachmentPlan[];
+  plannerPlatform: Platform;
+  setPlannerPlatform: (platform: Platform) => void;
+  detachments: Detachment[];
+  plans: PlatformPlan[];
+  getDetachment: (id: string) => Detachment | undefined;
+  getPlansForDetachment: (detachmentId: string) => PlatformPlan[];
   getPlanLines: (planId: string) => PlanLine[];
   updatePlanLines: (planId: string, lines: PlanLine[]) => void;
-  updatePlan: (planId: string, updates: Partial<DetachmentPlan>) => void;
-  createPlan: (input: CreatePlanInput) => DetachmentPlan;
+  updatePlan: (planId: string, updates: Partial<PlatformPlan>) => void;
+  createDetachment: (input: CreateDetachmentInput) => Detachment;
+  createPlan: (input: CreatePlanInput) => PlatformPlan;
+}
+
+export interface CreateDetachmentInput {
+  name: string;
+  detachmentDate: string;
 }
 
 export interface CreatePlanInput {
-  name: string;
+  detachmentId: string;
   platform: Platform;
-  variants: string[];
-  lSeriesVersion: string;
-  parameterTier: number;
+  detachmentType: DetachmentType;
   needByDate: string;
-  detachmentDate: string;
+  variantRows: PlanVariantRow[];
   remarks?: string;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
 
-function buildParameterValue(platform: Platform, tier: number): { label: string; value: string } {
-  const template = L_SERIES_TEMPLATE[platform];
-  if (platform === 'F-16') {
-    return { label: template.paramLabel, value: `${tier} hrs` };
-  }
-  return { label: template.paramLabel, value: `${tier} aircraft` };
-}
-
-function syncPlanMetrics(plan: DetachmentPlan, lines: PlanLine[]): DetachmentPlan {
+function syncPlanMetrics(plan: PlatformPlan, lines: PlanLine[]): PlatformPlan {
   return {
     ...plan,
     fillRatePercent: computeFillRate(lines),
@@ -69,7 +78,9 @@ function syncPlanMetrics(plan: DetachmentPlan, lines: PlanLine[]): DetachmentPla
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [role, setRole] = useState<UserRole>('planner');
-  const [plans, setPlans] = useState<DetachmentPlan[]>(MOCK_PLANS);
+  const [plannerPlatform, setPlannerPlatform] = useState<Platform>('F-16');
+  const [detachments, setDetachments] = useState<Detachment[]>(MOCK_DETACHMENTS);
+  const [plans, setPlans] = useState<PlatformPlan[]>(MOCK_PLANS);
   const [planLinesMap, setPlanLinesMap] = useState<Record<string, PlanLine[]>>(() => {
     const initial: Record<string, PlanLine[]> = {};
     for (const plan of MOCK_PLANS) {
@@ -79,6 +90,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
   });
 
   const currentUser = role === 'planner' ? PLANNER_USER : DIRECTOR_USER;
+
+  const getDetachment = useCallback(
+    (id: string) => detachments.find((d) => d.id === id),
+    [detachments],
+  );
+
+  const getPlansForDetachmentFn = useCallback(
+    (detachmentId: string) => getPlansForDetachment(plans, detachmentId),
+    [plans],
+  );
 
   const getPlanLines = useCallback(
     (planId: string) => planLinesMap[planId] ?? [],
@@ -92,23 +113,33 @@ export function AppProvider({ children }: { children: ReactNode }) {
     );
   }, []);
 
-  const updatePlan = useCallback((planId: string, updates: Partial<DetachmentPlan>) => {
+  const updatePlan = useCallback((planId: string, updates: Partial<PlatformPlan>) => {
     setPlans((prev) => prev.map((p) => (p.id === planId ? { ...p, ...updates } : p)));
   }, []);
 
-  const createPlan = useCallback((input: CreatePlanInput): DetachmentPlan => {
-    const id = `plan-${Date.now()}`;
-    const { label, value } = buildParameterValue(input.platform, input.parameterTier);
-    const newPlan: DetachmentPlan = {
+  const createDetachment = useCallback((input: CreateDetachmentInput): Detachment => {
+    const id = `det-${Date.now()}`;
+    const newDetachment: Detachment = {
       id,
       name: input.name,
-      platform: input.platform,
-      variant: input.variants.join(', '),
-      lSeriesVersion: input.lSeriesVersion || L_SERIES_VERSION_IDS[input.platform],
-      parameterLabel: label,
-      parameterValue: value,
-      needByDate: input.needByDate,
       detachmentDate: input.detachmentDate,
+      createdBy: DIRECTOR_USER.id,
+      createdByName: DIRECTOR_USER.name,
+      lastUpdated: new Date().toISOString(),
+    };
+    setDetachments((prev) => [newDetachment, ...prev]);
+    return newDetachment;
+  }, []);
+
+  const createPlan = useCallback((input: CreatePlanInput): PlatformPlan => {
+    const id = `plan-${Date.now()}`;
+    const newPlan: PlatformPlan = {
+      id,
+      detachmentId: input.detachmentId,
+      platform: input.platform,
+      detachmentType: input.detachmentType,
+      needByDate: input.needByDate,
+      variantRows: input.variantRows,
       status: 'Draft',
       fillRatePercent: 0,
       shortfallCount: 0,
@@ -131,13 +162,32 @@ export function AppProvider({ children }: { children: ReactNode }) {
       role,
       setRole,
       currentUser,
+      plannerPlatform,
+      setPlannerPlatform,
+      detachments,
       plans,
+      getDetachment,
+      getPlansForDetachment: getPlansForDetachmentFn,
       getPlanLines,
       updatePlanLines,
       updatePlan,
+      createDetachment,
       createPlan,
     }),
-    [role, currentUser, plans, getPlanLines, updatePlanLines, updatePlan, createPlan],
+    [
+      role,
+      currentUser,
+      plannerPlatform,
+      detachments,
+      plans,
+      getDetachment,
+      getPlansForDetachmentFn,
+      getPlanLines,
+      updatePlanLines,
+      updatePlan,
+      createDetachment,
+      createPlan,
+    ],
   );
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
@@ -149,19 +199,24 @@ export function useApp() {
   return ctx;
 }
 
-export function useVisiblePlans(): DetachmentPlan[] {
+export function useVisibleDetachments(): Detachment[] {
+  const { detachments } = useApp();
+  return detachments;
+}
+
+export function useIsViewOnly(detachment: Detachment | undefined): boolean {
+  const { role } = useApp();
+  if (!detachment) return true;
+  if (role === 'director') return true;
+  return isPastPlanViewOnly(detachment);
+}
+
+export function isPastPlanViewOnly(detachment: Detachment): boolean {
+  return isPastDetachment(detachment);
+}
+
+export function useVisiblePlans(): PlatformPlan[] {
   const { plans, role } = useApp();
   if (role === 'director') return plans;
   return plans.filter((p) => p.createdBy === PLANNER_USER.id);
-}
-
-export function useIsViewOnly(plan: DetachmentPlan | undefined): boolean {
-  const { role } = useApp();
-  if (!plan) return true;
-  if (role === 'director') return true;
-  return isPastPlanViewOnly(plan);
-}
-
-export function isPastPlanViewOnly(plan: DetachmentPlan): boolean {
-  return isPastDetachment(plan);
 }

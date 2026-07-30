@@ -4,16 +4,46 @@ export type Platform = 'F-16' | 'CH-47';
 
 export type PlanStatus = 'Draft' | 'Partially Approved' | 'Approved';
 
-export interface DetachmentPlan {
+export type DetachmentType =
+  | 'Short'
+  | 'Long'
+  | 'Long Route Nav'
+  | 'Far Sail'
+  | 'Near Sail';
+
+export const DETACHMENT_TYPE_OPTIONS: DetachmentType[] = [
+  'Short',
+  'Long',
+  'Long Route Nav',
+  'Far Sail',
+  'Near Sail',
+];
+
+/** Director-created exercise container — name and date only. */
+export interface Detachment {
   id: string;
   name: string;
-  platform: Platform;
+  detachmentDate: string;
+  createdBy: string;
+  createdByName: string;
+  lastUpdated: string;
+}
+
+/** Per-variant configuration within a platform plan. */
+export interface PlanVariantRow {
   variant: string;
   lSeriesVersion: string;
-  parameterLabel: string;
-  parameterValue: string;
+  parameterTier: number;
+}
+
+/** Planner-created platform plan linked to a detachment. */
+export interface PlatformPlan {
+  id: string;
+  detachmentId: string;
+  platform: Platform;
+  detachmentType: DetachmentType;
   needByDate: string;
-  detachmentDate: string;
+  variantRows: PlanVariantRow[];
   status: PlanStatus;
   fillRatePercent: number;
   shortfallCount: number;
@@ -24,6 +54,17 @@ export interface DetachmentPlan {
   lastUpdated: string;
   remarks?: string;
 }
+
+/** @deprecated Use PlatformPlan */
+export type DetachmentPlan = PlatformPlan & {
+  name?: string;
+  variant?: string;
+  lSeriesVersion?: string;
+  parameterLabel?: string;
+  parameterValue?: string;
+  detachmentDate?: string;
+  detachmentType?: DetachmentType;
+};
 
 export interface User {
   id: string;

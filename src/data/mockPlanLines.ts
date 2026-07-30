@@ -1,9 +1,9 @@
 import type { RepairEddOption } from '../types/planLine';
-import type { DetachmentPlan } from '../types/detachment';
+import type { PlatformPlan } from '../types/detachment';
 import { getDefaultPlanLinesForPlan } from '../utils/generatePlanLines';
 import dayjs from 'dayjs';
 
-export function getDefaultPlanLines(plan: DetachmentPlan): ReturnType<typeof getDefaultPlanLinesForPlan> {
+export function getDefaultPlanLines(plan: PlatformPlan): ReturnType<typeof getDefaultPlanLinesForPlan> {
   return getDefaultPlanLinesForPlan(plan);
 }
 

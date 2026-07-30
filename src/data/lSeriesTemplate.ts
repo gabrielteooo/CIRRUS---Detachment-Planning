@@ -1,4 +1,5 @@
 import type { Platform } from '../types/detachment';
+import { getCatalogEntry } from './nsnCatalog';
 
 export interface LSComponent {
   nsn: string;
@@ -429,6 +430,17 @@ export const L_SERIES_VERSION_IDS = {
 } as const;
 
 export function getMpnForNsn(nsn: string): string {
+  const catalogEntry = getCatalogEntry(nsn);
+  if (catalogEntry) return catalogEntry.mpn;
+
+  const interchangeableMpns: Record<string, string> = {
+    '1560-01-233-A': 'MPN-IGN-A',
+    '1560-01-233-B': 'MPN-IGN-B',
+    '1560-01-233-C': 'MPN-IGN-C',
+    '1560-01-233-D': 'MPN-IGN-D',
+  };
+  if (interchangeableMpns[nsn]) return interchangeableMpns[nsn];
+
   const base = nsn.replace(/-ALT$/, '');
   for (const template of Object.values(L_SERIES_TEMPLATE)) {
     const found = template.components.find((c) => c.nsn === base);

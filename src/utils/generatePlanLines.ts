@@ -1,11 +1,7 @@
+import { buildInterchangeableDemoLine } from './interchangeableLines';
 import { L_SERIES_TEMPLATE } from '../data/lSeriesTemplate';
-import type { DetachmentPlan, Platform } from '../types/detachment';
+import type { Platform, PlatformPlan } from '../types/detachment';
 import type { InventoryItem, PlanLine } from '../types/planLine';
-
-function parseParameterTier(plan: DetachmentPlan): number {
-  const match = plan.parameterValue.match(/(\d+)/);
-  return match ? Number(match[1]) : L_SERIES_TEMPLATE[plan.platform].tiers[0];
-}
 
 function hashSeed(text: string): number {
   let h = 0;
@@ -74,19 +70,38 @@ export function getRequiredQty(platform: Platform, tier: number, nsn: string): n
   return component.qtyByTier[String(tier)] ?? 0;
 }
 
-export function buildPlanLinesFromTemplate(plan: DetachmentPlan): PlanLine[] {
+function computeRequiredQtyByNsn(plan: PlatformPlan): Map<string, { qty: number; description: string }> {
   const template = L_SERIES_TEMPLATE[plan.platform];
-  const tier = parseParameterTier(plan);
+  const nsnMap = new Map<string, { qty: number; description: string }>();
 
-  return template.components.map((component, index) => {
-    const requiredQty = component.qtyByTier[String(tier)] ?? 0;
-    const availableQty = mockAvailableQty(requiredQty, component.nsn, plan.id);
-    const inventory = buildInventory(component.nsn, component.description, availableQty);
+  for (const row of plan.variantRows) {
+    for (const component of template.components) {
+      const qty = component.qtyByTier[String(row.parameterTier)] ?? 0;
+      const existing = nsnMap.get(component.nsn);
+      if (existing) {
+        existing.qty += qty;
+      } else {
+        nsnMap.set(component.nsn, { qty, description: component.description });
+      }
+    }
+  }
+
+  return nsnMap;
+}
+
+export function buildPlanLinesFromTemplate(plan: PlatformPlan): PlanLine[] {
+  const nsnMap = computeRequiredQtyByNsn(plan);
+  let index = 0;
+
+  return [...nsnMap.entries()].map(([nsn, { qty: requiredQty, description }]) => {
+    index += 1;
+    const availableQty = mockAvailableQty(requiredQty, nsn, plan.id);
+    const inventory = buildInventory(nsn, description, availableQty);
 
     return {
-      id: `${plan.id}-line-${index + 1}`,
-      nsn: component.nsn,
-      description: component.description,
+      id: `${plan.id}-line-${index}`,
+      nsn,
+      description,
       requiredQty,
       availableQty,
       toBringQty: requiredQty,
@@ -133,6 +148,7 @@ export function applyDemoScenario(planId: string, lines: PlanLine[]): PlanLine[]
   });
 
   patch('1560-01-245', {
+    availableQty: 30,
     toBringQty: (lines.find((l) => l.nsn === '1560-01-245')?.requiredQty ?? 20) + 5,
     deviationReason: 'Exercise needs',
     deviationRemarks: 'Additional fasteners for extended deployment',
@@ -154,10 +170,15 @@ export function applyDemoScenario(planId: string, lines: PlanLine[]): PlanLine[]
     ],
   });
 
+  const igniterIdx = lines.findIndex((l) => l.nsn === '1560-01-233');
+  if (igniterIdx >= 0) {
+    lines[igniterIdx] = buildInterchangeableDemoLine(lines[igniterIdx]);
+  }
+
   return lines;
 }
 
-export function getDefaultPlanLinesForPlan(plan: DetachmentPlan): PlanLine[] {
+export function getDefaultPlanLinesForPlan(plan: PlatformPlan): PlanLine[] {
   const lines = buildPlanLinesFromTemplate(plan);
   return applyDemoScenario(plan.id, lines);
 }

@@ -1,52 +1,129 @@
 import { useMemo, useState } from 'react';
 import { Button, Input, Select, Space, Tabs, Typography } from 'antd';
 import { PlusOutlined, SearchOutlined } from '@ant-design/icons';
-import { useApp, useVisiblePlans } from '../context/AppContext';
+import { useApp, useVisibleDetachments } from '../context/AppContext';
 import { isPastDetachment } from '../utils/planUtils';
-import { PlanCardGrid } from '../components/plans/PlanCard';
+import { DetachmentCardGrid } from '../components/plans/DetachmentCard';
 import CreateDetachmentModal from '../components/plans/CreateDetachmentModal';
-import type { PlanStatus } from '../types/detachment';
+import CreatePlanModal from '../components/plans/CreatePlanModal';
+import type { PlanStatus, Platform } from '../types/detachment';
+import { aggregateDetachmentStatus } from '../data/mockPlans';
 
 const STATUS_OPTIONS: PlanStatus[] = ['Draft', 'Partially Approved', 'Approved'];
 
+const DIRECTOR_PLATFORM_OPTIONS = [
+  { label: 'All platforms', value: 'all' },
+  { label: 'F-16', value: 'F-16' },
+  { label: 'CH-47', value: 'CH-47' },
+];
+
+const PLANNER_PLATFORM_OPTIONS = [
+  { label: 'F-16', value: 'F-16' },
+  { label: 'CH-47', value: 'CH-47' },
+];
+
 export default function PlanListPage() {
-  const { role, setRole } = useApp();
-  const visiblePlans = useVisiblePlans();
+  const { role, setRole, plans, plannerPlatform, setPlannerPlatform } = useApp();
+  const visibleDetachments = useVisibleDetachments();
   const [tab, setTab] = useState<'open' | 'past'>('open');
-  const [platformFilter, setPlatformFilter] = useState<string>('all');
+  const [directorPlatformFilter, setDirectorPlatformFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [search, setSearch] = useState('');
-  const [createOpen, setCreateOpen] = useState(false);
+  const [createDetachmentOpen, setCreateDetachmentOpen] = useState(false);
+  const [createPlanOpen, setCreatePlanOpen] = useState(false);
 
-  const filteredPlans = useMemo(() => {
-    let result = visiblePlans.filter((p) => {
-      const isPast = isPastDetachment(p);
-      if (tab === 'open') return !isPast;
-      return isPast && p.status === 'Approved';
+  const isDirector = role === 'director';
+  const platformFilter = isDirector ? directorPlatformFilter : plannerPlatform;
+
+  const handlePlatformFilterChange = (value: string) => {
+    if (isDirector) {
+      setDirectorPlatformFilter(value);
+    } else {
+      setPlannerPlatform(value as Platform);
+    }
+  };
+
+  const filteredDetachments = useMemo(() => {
+    let result = visibleDetachments.filter((d) => {
+      const isPast = isPastDetachment(d);
+      const detachmentPlans = plans.filter((p) => p.detachmentId === d.id);
+
+      if (tab === 'open') {
+        if (isPast) return false;
+      } else {
+        if (!isPast) return false;
+        if (isDirector) {
+          return detachmentPlans.length > 0 && detachmentPlans.every((p) => p.status === 'Approved');
+        }
+        const pastPlan = detachmentPlans.find(
+          (p) => p.platform === plannerPlatform && p.status === 'Approved',
+        );
+        return !!pastPlan;
+      }
+
+      if (isDirector) return true;
+
+      return detachmentPlans.some((p) => p.platform === plannerPlatform);
     });
 
     if (platformFilter !== 'all') {
-      result = result.filter((p) => p.platform === platformFilter);
+      result = result.filter((d) => {
+        const detachmentPlans = plans.filter((p) => p.detachmentId === d.id);
+        if (isDirector) {
+          return detachmentPlans.some((p) => p.platform === platformFilter);
+        }
+        return detachmentPlans.some((p) => p.platform === platformFilter);
+      });
     }
 
     if (tab === 'open' && statusFilter !== 'all') {
-      result = result.filter((p) => p.status === statusFilter);
+      result = result.filter((d) => {
+        const detachmentPlans = plans.filter((p) => p.detachmentId === d.id);
+        if (isDirector) {
+          return aggregateDetachmentStatus(detachmentPlans) === statusFilter;
+        }
+        const platformPlan = detachmentPlans.find((p) => p.platform === plannerPlatform);
+        return platformPlan?.status === statusFilter;
+      });
     }
 
     if (search.trim()) {
       const q = search.toLowerCase();
-      result = result.filter(
-        (p) =>
-          p.name.toLowerCase().includes(q) ||
-          p.platform.toLowerCase().includes(q) ||
-          p.variant.toLowerCase().includes(q),
-      );
+      result = result.filter((d) => {
+        const detachmentPlans = plans.filter((p) => p.detachmentId === d.id);
+        const relevantPlans = isDirector
+          ? detachmentPlans
+          : detachmentPlans.filter((p) => p.platform === plannerPlatform);
+        return (
+          d.name.toLowerCase().includes(q) ||
+          relevantPlans.some(
+            (p) =>
+              p.platform.toLowerCase().includes(q) ||
+              p.variantRows.some((row) => row.variant.toLowerCase().includes(q)),
+          )
+        );
+      });
     }
 
     return result;
-  }, [visiblePlans, tab, platformFilter, statusFilter, search]);
+  }, [
+    visibleDetachments,
+    plans,
+    tab,
+    platformFilter,
+    statusFilter,
+    search,
+    isDirector,
+    plannerPlatform,
+  ]);
 
-  const showCreate = role === 'planner' && tab === 'open';
+  const cardPlans = useMemo(() => {
+    if (isDirector) return plans;
+    return plans.filter((p) => p.platform === plannerPlatform);
+  }, [plans, isDirector, plannerPlatform]);
+
+  const showCreateDetachment = isDirector && tab === 'open';
+  const showCreatePlan = !isDirector && tab === 'open';
 
   return (
     <div>
@@ -73,13 +150,9 @@ export default function PlanListPage() {
           />
           <Select
             value={platformFilter}
-            onChange={setPlatformFilter}
+            onChange={handlePlatformFilterChange}
             style={{ width: 120 }}
-            options={[
-              { label: 'All platforms', value: 'all' },
-              { label: 'F-16', value: 'F-16' },
-              { label: 'CH-47', value: 'CH-47' },
-            ]}
+            options={isDirector ? DIRECTOR_PLATFORM_OPTIONS : PLANNER_PLATFORM_OPTIONS}
           />
           {tab === 'open' && (
             <Select
@@ -93,7 +166,7 @@ export default function PlanListPage() {
             />
           )}
           <Input
-            placeholder="Search plans"
+            placeholder="Search detachments"
             prefix={<SearchOutlined />}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -102,11 +175,18 @@ export default function PlanListPage() {
           />
         </Space>
 
-        {showCreate && (
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
-            Create Detachment
-          </Button>
-        )}
+        <Space>
+          {showCreatePlan && (
+            <Button icon={<PlusOutlined />} onClick={() => setCreatePlanOpen(true)}>
+              Create Plan
+            </Button>
+          )}
+          {showCreateDetachment && (
+            <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateDetachmentOpen(true)}>
+              Create Detachment
+            </Button>
+          )}
+        </Space>
       </div>
 
       <Tabs
@@ -119,9 +199,14 @@ export default function PlanListPage() {
         style={{ marginBottom: 16 }}
       />
 
-      <PlanCardGrid plans={filteredPlans} showCreator={role === 'director'} />
+      <DetachmentCardGrid
+        detachments={filteredDetachments}
+        plans={cardPlans}
+        showCreator={isDirector}
+      />
 
-      <CreateDetachmentModal open={createOpen} onClose={() => setCreateOpen(false)} />
+      <CreateDetachmentModal open={createDetachmentOpen} onClose={() => setCreateDetachmentOpen(false)} />
+      <CreatePlanModal open={createPlanOpen} onClose={() => setCreatePlanOpen(false)} />
     </div>
   );
 }

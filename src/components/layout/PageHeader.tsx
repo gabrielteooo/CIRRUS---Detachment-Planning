@@ -6,11 +6,12 @@ import { DATA_SYNC_TIMESTAMP } from '../../types/detachment';
 
 export default function PageHeader() {
   const location = useLocation();
-  const { planId } = useParams();
-  const { plans, currentUser } = useApp();
+  const { detachmentId } = useParams();
+  const { getDetachment, currentUser } = useApp();
 
-  const isDetails = location.pathname.includes('/detachment-planning/') && planId;
-  const plan = isDetails ? plans.find((p) => p.id === planId) : undefined;
+  const isDetails =
+    location.pathname.includes('/detachment-planning/') && detachmentId;
+  const detachment = isDetails && detachmentId ? getDetachment(detachmentId) : undefined;
 
   const breadcrumbItems = [
     {
@@ -22,11 +23,11 @@ export default function PageHeader() {
     },
     { title: <Link to="/detachment-planning">CIRRUS</Link> },
     {
-      title: isDetails && plan ? plan.name : 'Detachment Planning',
+      title: isDetails && detachment ? detachment.name : 'Detachment Planning',
     },
   ];
 
-  const pageTitle = isDetails && plan ? plan.name : 'Detachment Planning';
+  const pageTitle = isDetails && detachment ? detachment.name : 'Detachment Planning';
 
   return (
     <div

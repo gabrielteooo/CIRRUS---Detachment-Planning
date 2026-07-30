@@ -1,0 +1,121 @@
+import type { Detachment } from '../types/detachment';
+import { DIRECTOR_USER } from '../types/detachment';
+
+export const MOCK_DETACHMENTS: Detachment[] = [
+  {
+    id: 'det-empty',
+    name: 'Exercise Horizon 2026',
+    detachmentDate: '2026-07-10',
+    createdBy: DIRECTOR_USER.id,
+    createdByName: DIRECTOR_USER.name,
+    lastUpdated: '2026-07-20T10:00:00',
+  },
+  {
+    id: 'det-001',
+    name: 'Exercise Falcon 2026',
+    detachmentDate: '2026-03-15',
+    createdBy: DIRECTOR_USER.id,
+    createdByName: DIRECTOR_USER.name,
+    lastUpdated: '2026-07-28T09:30:00',
+  },
+  {
+    id: 'det-002',
+    name: 'Operation Lift 2026',
+    detachmentDate: '2026-04-25',
+    createdBy: DIRECTOR_USER.id,
+    createdByName: DIRECTOR_USER.name,
+    lastUpdated: '2026-07-27T14:15:00',
+  },
+  {
+    id: 'det-003',
+    name: 'Detachment Alpha',
+    detachmentDate: '2026-05-20',
+    createdBy: DIRECTOR_USER.id,
+    createdByName: DIRECTOR_USER.name,
+    lastUpdated: '2026-07-25T11:00:00',
+  },
+  {
+    id: 'det-joint',
+    name: 'Joint Exercise 2026',
+    detachmentDate: '2026-06-18',
+    createdBy: DIRECTOR_USER.id,
+    createdByName: DIRECTOR_USER.name,
+    lastUpdated: '2026-07-26T10:00:00',
+  },
+  {
+    id: 'det-004',
+    name: 'Exercise Eagle 2025',
+    detachmentDate: '2025-08-15',
+    createdBy: DIRECTOR_USER.id,
+    createdByName: DIRECTOR_USER.name,
+    lastUpdated: '2025-09-01T08:00:00',
+  },
+  {
+    id: 'det-005',
+    name: 'Operation Chinook 2025',
+    detachmentDate: '2025-11-18',
+    createdBy: DIRECTOR_USER.id,
+    createdByName: DIRECTOR_USER.name,
+    lastUpdated: '2025-11-20T16:45:00',
+  },
+  {
+    id: 'det-006',
+    name: 'Detachment Bravo',
+    detachmentDate: '2026-06-18',
+    createdBy: DIRECTOR_USER.id,
+    createdByName: DIRECTOR_USER.name,
+    lastUpdated: '2026-07-26T10:00:00',
+  },
+  {
+    id: 'det-007',
+    name: 'Exercise Talon 2025',
+    detachmentDate: '2025-06-20',
+    createdBy: DIRECTOR_USER.id,
+    createdByName: DIRECTOR_USER.name,
+    lastUpdated: '2025-06-22T10:00:00',
+  },
+  {
+    id: 'det-008',
+    name: 'Detachment Charlie',
+    detachmentDate: '2025-04-18',
+    createdBy: DIRECTOR_USER.id,
+    createdByName: DIRECTOR_USER.name,
+    lastUpdated: '2025-04-20T14:00:00',
+  },
+  {
+    id: 'det-009',
+    name: 'Operation Heavy Lift 2025',
+    detachmentDate: '2025-09-15',
+    createdBy: DIRECTOR_USER.id,
+    createdByName: DIRECTOR_USER.name,
+    lastUpdated: '2025-09-17T09:00:00',
+  },
+  {
+    id: 'det-010',
+    name: 'Exercise Strike 2025',
+    detachmentDate: '2025-02-14',
+    createdBy: DIRECTOR_USER.id,
+    createdByName: DIRECTOR_USER.name,
+    lastUpdated: '2025-02-16T11:30:00',
+  },
+  {
+    id: 'det-011',
+    name: 'Detachment Delta',
+    detachmentDate: '2025-07-22',
+    createdBy: DIRECTOR_USER.id,
+    createdByName: DIRECTOR_USER.name,
+    lastUpdated: '2025-07-24T16:00:00',
+  },
+  {
+    id: 'det-012',
+    name: 'Exercise Vanguard 2024',
+    detachmentDate: '2024-10-25',
+    createdBy: DIRECTOR_USER.id,
+    createdByName: DIRECTOR_USER.name,
+    lastUpdated: '2024-10-28T08:00:00',
+  },
+];
+
+export function getDetachmentById(id: string): Detachment | undefined {
+  return MOCK_DETACHMENTS.find((d) => d.id === id);
+}

@@ -6,19 +6,25 @@ import {
   getLineStatus,
   getShortfallQty,
 } from '../../types/planLine';
+import type { Platform } from '../../types/detachment';
 import {
   getNsnMpnDescriptionColumns,
+  getPlatformVariantColumn,
   getRequiredColumn,
   getAvailableColumn,
+  getAvailableColumnLinkRenderer,
   DETACHMENT_TABLE_LAYOUT,
   DETACHMENT_TABLE_SCROLL_X,
 } from './nsnTableColumns';
 
 interface ShortfallSummaryProps {
   lines: PlanLine[];
+  platform: Platform;
+  variant: string;
   viewOnly: boolean;
   onEditLine: (line: PlanLine) => void;
   onToggleApproval: (lineId: string, approved: boolean) => void;
+  onViewInventory: (line: PlanLine) => void;
 }
 
 function ShortfallHeader({ count }: { count: number }) {
@@ -38,9 +44,12 @@ function ShortfallHeader({ count }: { count: number }) {
 
 export default function ShortfallSummary({
   lines,
+  platform,
+  variant,
   viewOnly,
   onEditLine,
   onToggleApproval,
+  onViewInventory,
 }: ShortfallSummaryProps) {
   const shortfallLines = lines.filter((l) => getLineStatus(l) === 'Shortfall');
 
@@ -48,8 +57,9 @@ export default function ShortfallSummary({
 
   const columns = [
     ...getNsnMpnDescriptionColumns<PlanLine>(),
+    getPlatformVariantColumn<PlanLine>(platform, variant),
     getRequiredColumn<PlanLine>(),
-    getAvailableColumn<PlanLine>(),
+    getAvailableColumn<PlanLine>(getAvailableColumnLinkRenderer(onViewInventory)),
     {
       title: 'Shortfall',
       width: 100,

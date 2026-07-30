@@ -1,10 +1,13 @@
 import { Badge, Collapse, Table, Button, Checkbox, Typography } from 'antd';
 import type { PlanLine } from '../../types/planLine';
 import { getLineStatus } from '../../types/planLine';
+import type { Platform } from '../../types/detachment';
 import {
   getNsnMpnDescriptionColumns,
+  getPlatformVariantColumn,
   getRequiredColumn,
   getAvailableColumn,
+  getAvailableColumnLinkRenderer,
   getToBringColumn,
   DETACHMENT_TABLE_LAYOUT,
   DEVIATION_SUMMARY_SCROLL_X,
@@ -12,9 +15,12 @@ import {
 
 interface DeviationSummaryProps {
   lines: PlanLine[];
+  platform: Platform;
+  variant: string;
   viewOnly: boolean;
   onEditLine: (line: PlanLine) => void;
   onToggleApproval: (lineId: string, approved: boolean) => void;
+  onViewInventory: (line: PlanLine) => void;
 }
 
 function DeviationHeader({ count }: { count: number }) {
@@ -34,9 +40,12 @@ function DeviationHeader({ count }: { count: number }) {
 
 export default function DeviationSummary({
   lines,
+  platform,
+  variant,
   viewOnly,
   onEditLine,
   onToggleApproval,
+  onViewInventory,
 }: DeviationSummaryProps) {
   const deviationLines = lines.filter((l) => getLineStatus(l) === 'Deviation');
 
@@ -44,8 +53,9 @@ export default function DeviationSummary({
 
   const columns = [
     ...getNsnMpnDescriptionColumns<PlanLine>(),
+    getPlatformVariantColumn<PlanLine>(platform, variant),
     getRequiredColumn<PlanLine>(),
-    getAvailableColumn<PlanLine>(),
+    getAvailableColumn<PlanLine>(getAvailableColumnLinkRenderer(onViewInventory)),
     getToBringColumn<PlanLine>(),
     {
       title: 'Delta',
