@@ -165,7 +165,7 @@ export function DetachmentCardGrid({
   return (
     <Row gutter={[16, 16]}>
       {detachments.map((detachment) => (
-        <Col key={detachment.id} xs={24} sm={12} md={8} lg={6}>
+        <Col key={detachment.id} xs={24} sm={12} md={8} lg={8} xl={8}>
           <DetachmentCard
             detachment={detachment}
             plans={plans.filter((p) => p.detachmentId === detachment.id)}
