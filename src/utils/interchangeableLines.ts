@@ -81,7 +81,7 @@ export function buildInterchangeableDemoLine(base: PlanLine): PlanLine {
     description: 'Igniter Plug, Turbine Engine',
     requiredQty,
     availableQty,
-    toBringQty: 1,
+    toBringQty: 2,
     interchangeableMembers: members,
     toBringAllocation,
     shortfallTargetNsn: '1560-01-233-A',

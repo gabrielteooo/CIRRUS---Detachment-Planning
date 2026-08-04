@@ -122,7 +122,7 @@ export function applyDemoScenario(planId: string, lines: PlanLine[]): PlanLine[]
 
   patch('1560-01-234', {
     availableQty: 0,
-    toBringQty: 1,
+    toBringQty: 2,
     inventory: [
       { type: 'Main', nsn: '1560-01-234', description: 'Hydraulic Pump, Utility System', location: 'WH-A / Rack 3', qty: 1, status: 'In WH' },
       { type: 'Alt', nsn: '1560-01-234-ALT', description: 'Hydraulic Pump, Utility System (alternate)', location: 'WH-B / Rack 1', qty: 0, status: 'Blocked' },
@@ -165,6 +165,7 @@ export function applyDemoScenario(planId: string, lines: PlanLine[]): PlanLine[]
 
   patch('1560-01-246', {
     availableQty: 3,
+    toBringQty: 2,
     shortfallActions: [
       { type: 'wait', qty: 2, needByDate: '2026-03-01', repairComponentRef: 'PO2345678', approved: true },
     ],

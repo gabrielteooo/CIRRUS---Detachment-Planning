@@ -136,6 +136,33 @@ export function computePlanStatus(lines: PlanLine[]): 'Draft' | 'Partially Appro
   return 'Draft';
 }
 
+export function sumShortfallActionQty(actions: ShortfallAction[]): number {
+  return actions.reduce((sum, action) => {
+    if (action.type === 'accept') return sum;
+    return sum + action.qty;
+  }, 0);
+}
+
+/**
+ * To-bring matches required when stock is sufficient.
+ * In shortfall, to-bring = available + wait/cannibalise resolution qty.
+ */
+export function computeToBringQty(
+  line: Pick<PlanLine, 'requiredQty' | 'availableQty' | 'interchangeableMembers'>,
+  actions: ShortfallAction[] = [],
+): number {
+  const available = getGroupAvailableQty(line as PlanLine);
+  if (available >= line.requiredQty) {
+    return line.requiredQty;
+  }
+  return available + sumShortfallActionQty(actions);
+}
+
+/** @deprecated Use computeToBringQty */
+export function computeToBringFromShortfallActions(actions: ShortfallAction[]): number {
+  return sumShortfallActionQty(actions);
+}
+
 export function formatShortfallActions(actions: ShortfallAction[]): string {
   const labels: Record<ShortfallActionType, string> = {
     accept: 'Accept shortfall',

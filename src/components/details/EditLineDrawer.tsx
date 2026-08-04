@@ -20,6 +20,7 @@ import type {
 } from '../../types/planLine';
 import {
   formatLineStatus,
+  computeToBringQty,
   getGroupAvailableQty,
   getPrimaryMemberNsn,
   getShortfallQty,
@@ -55,15 +56,8 @@ function resolveLineStatus(line: PlanLine, toBringQty: number): LineStatus {
   return 'Met';
 }
 
-function ActionDetailCard({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <div className="shortfall-action-card shortfall-action-card--selected">
-      <Typography.Text strong style={{ display: 'block', marginBottom: 12 }}>
-        {title}
-      </Typography.Text>
-      {children}
-    </div>
-  );
+function ActionDetailFields({ children }: { children: ReactNode }) {
+  return <div className="shortfall-action-details">{children}</div>;
 }
 
 function QtyReferenceStat({
@@ -133,6 +127,9 @@ export default function EditLineDrawer({
 }: EditLineDrawerProps) {
   const [form] = Form.useForm();
   const toBringQty = Form.useWatch('toBringQty', form);
+  const acceptQty = Form.useWatch('acceptQty', form);
+  const waitQty = Form.useWatch('waitQty', form);
+  const cannQty = Form.useWatch('cannQty', form);
   const shortfallActionTypes = Form.useWatch('shortfallActionTypes', form) as
     | ShortfallActionType[]
     | undefined;
@@ -145,7 +142,11 @@ export default function EditLineDrawer({
       const defaultQty = getShortfallQty(line) || 1;
 
       form.setFieldsValue({
-        toBringQty: line.toBringQty,
+        toBringQty:
+          line.availableQty < line.requiredQty ||
+          getGroupAvailableQty(line) < line.requiredQty
+            ? computeToBringQty(line, line.shortfallActions)
+            : line.toBringQty,
         deviationReason: line.deviationReason,
         shortfallTargetNsn:
           waitAction?.targetNsn ??
@@ -165,38 +166,55 @@ export default function EditLineDrawer({
     }
   }, [line, open, form]);
 
+  const currentToBring = toBringQty ?? line?.toBringQty ?? 0;
+  const lineMode = line ? resolveLineMode(line, currentToBring) : null;
+
+  useEffect(() => {
+    if (!line || !open || lineMode !== 'shortfall') return;
+
+    const actionTypes = shortfallActionTypes ?? [];
+    const derivedToBring = computeToBringQty(
+      line,
+      actionTypes.map((type) => {
+        if (type === 'accept') return { type, qty: acceptQty ?? 0 } as ShortfallAction;
+        if (type === 'wait') return { type, qty: waitQty ?? 0 } as ShortfallAction;
+        return { type: 'cannibalise', qty: cannQty ?? 0 } as ShortfallAction;
+      }),
+    );
+
+    if (derivedToBring !== toBringQty) {
+      form.setFieldValue('toBringQty', derivedToBring);
+    }
+  }, [
+    line,
+    open,
+    lineMode,
+    shortfallActionTypes,
+    acceptQty,
+    waitQty,
+    cannQty,
+    toBringQty,
+    form,
+  ]);
+
   if (!line) return null;
 
   const isGroup = isInterchangeableLine(line);
   const groupAvailable = getGroupAvailableQty(line);
 
-  const currentToBring = toBringQty ?? line.toBringQty;
-  const lineMode = resolveLineMode(line, currentToBring);
-  const lineStatus = resolveLineStatus(line, currentToBring);
+  const currentToBringResolved = toBringQty ?? line.toBringQty;
+  const lineStatus = resolveLineStatus(line, currentToBringResolved);
   const shortfallQty = getShortfallQty(line);
   const selectedActions = shortfallActionTypes ?? [];
 
   const handleSave = async () => {
     try {
       const values = await form.validateFields();
-      const nextToBringQty = values.toBringQty ?? line.requiredQty;
-
-      if (nextToBringQty > groupAvailable) {
-        message.error(`To-bring cannot exceed available qty (${groupAvailable})`);
-        return;
-      }
-
-      const mode = resolveLineMode(line, nextToBringQty);
       const actionTypes: ShortfallActionType[] = values.shortfallActionTypes ?? [];
       const shortfallTargetNsn = values.shortfallTargetNsn as string | undefined;
 
-      if (mode === 'shortfall' && actionTypes.length === 0) {
-        message.error('Select at least one resolution action');
-        return;
-      }
-
       const shortfallActions: ShortfallAction[] =
-        mode === 'shortfall'
+        resolveLineMode(line, values.toBringQty ?? line.toBringQty) === 'shortfall'
           ? actionTypes.map((type) => {
               const existing = line.shortfallActions.find((a) => a.type === type);
               const approved = existing?.approved ?? false;
@@ -231,6 +249,23 @@ export default function EditLineDrawer({
               };
             })
           : [];
+
+      const mode = resolveLineMode(line, values.toBringQty ?? line.toBringQty);
+
+      if (mode === 'shortfall' && actionTypes.length === 0) {
+        message.error('Select at least one resolution action');
+        return;
+      }
+
+      const nextToBringQty =
+        mode === 'shortfall'
+          ? computeToBringQty(line, shortfallActions)
+          : (values.toBringQty ?? line.requiredQty);
+
+      if (mode !== 'shortfall' && nextToBringQty > groupAvailable) {
+        message.error(`To-bring cannot exceed available qty (${groupAvailable})`);
+        return;
+      }
 
       if (mode === 'shortfall' && actionTypes.includes('cannibalise') && !values.cannTail) {
         message.error('Cannibalise requires aircraft tail #');
@@ -290,7 +325,9 @@ export default function EditLineDrawer({
             To-bring qty
           </Typography.Text>
           <Typography.Text type="secondary" className="edit-line-qty-panel-subtitle">
-            Use required and available below as reference when setting to-bring.
+            {lineMode === 'shortfall'
+              ? 'Matches required qty when stock is sufficient; otherwise available plus wait/cannibalise resolution qty.'
+              : 'Use required and available below as reference when setting to-bring.'}
           </Typography.Text>
 
           <div className="edit-line-qty-reference">
@@ -307,23 +344,29 @@ export default function EditLineDrawer({
             label="To-bring"
             rules={[
               { required: true, message: 'Enter to-bring quantity' },
-              {
-                validator: (_, value) => {
-                  if (value == null || value <= groupAvailable) {
-                    return Promise.resolve();
-                  }
-                  return Promise.reject(
-                    new Error(`To-bring cannot exceed available qty (${groupAvailable})`),
-                  );
-                },
-              },
+              ...(lineMode === 'shortfall'
+                ? []
+                : [
+                    {
+                      validator: (_: unknown, value: number | null) => {
+                        if (value == null || value <= groupAvailable) {
+                          return Promise.resolve();
+                        }
+                        return Promise.reject(
+                          new Error(`To-bring cannot exceed available qty (${groupAvailable})`),
+                        );
+                      },
+                    },
+                  ]),
             ]}
             className="edit-line-to-bring-field"
           >
             <InputNumber
               className="edit-line-to-bring"
               min={0}
-              max={groupAvailable}
+              max={lineMode === 'shortfall' ? undefined : groupAvailable}
+              readOnly={lineMode === 'shortfall'}
+              disabled={lineMode === 'shortfall'}
               style={{ width: '100%', height: 48 }}
             />
           </Form.Item>
@@ -380,93 +423,101 @@ export default function EditLineDrawer({
               <Checkbox.Group className="shortfall-action-checkboxes">
                 <Space direction="vertical" size={8} style={{ width: '100%' }}>
                   <div
-                    className={`shortfall-action-row${
-                      selectedActions.includes('accept') ? ' shortfall-action-row--selected' : ''
+                    className={`shortfall-action-block${
+                      selectedActions.includes('accept') ? ' shortfall-action-block--selected' : ''
                     }`}
                   >
-                    <Checkbox value="accept">Accept shortfall</Checkbox>
-                    <ShortfallActionQtyField
-                      actionType="accept"
-                      fieldName="acceptQty"
-                      selectedActions={selectedActions}
-                      shortfallQty={shortfallQty}
-                    />
+                    <div className="shortfall-action-row">
+                      <Checkbox value="accept">Accept shortfall</Checkbox>
+                      <ShortfallActionQtyField
+                        actionType="accept"
+                        fieldName="acceptQty"
+                        selectedActions={selectedActions}
+                        shortfallQty={shortfallQty}
+                      />
+                    </div>
+                    {selectedActions.includes('accept') && (
+                      <ActionDetailFields>
+                        <Form.Item name="acceptRemarks" label="Risk / remarks">
+                          <Input.TextArea rows={2} />
+                        </Form.Item>
+                      </ActionDetailFields>
+                    )}
                   </div>
+
                   <div
-                    className={`shortfall-action-row${
-                      selectedActions.includes('wait') ? ' shortfall-action-row--selected' : ''
+                    className={`shortfall-action-block${
+                      selectedActions.includes('wait') ? ' shortfall-action-block--selected' : ''
                     }`}
                   >
-                    <Checkbox value="wait">Wait (expedite repair/new buys)</Checkbox>
-                    <ShortfallActionQtyField
-                      actionType="wait"
-                      fieldName="waitQty"
-                      selectedActions={selectedActions}
-                      shortfallQty={shortfallQty}
-                    />
+                    <div className="shortfall-action-row">
+                      <Checkbox value="wait">Wait (expedite repair/new buys)</Checkbox>
+                      <ShortfallActionQtyField
+                        actionType="wait"
+                        fieldName="waitQty"
+                        selectedActions={selectedActions}
+                        shortfallQty={shortfallQty}
+                      />
+                    </div>
+                    {selectedActions.includes('wait') && (
+                      <ActionDetailFields>
+                        <Form.Item
+                          name="waitRef"
+                          label="Component PO no."
+                          rules={[{ required: true, message: 'Enter PO no.' }]}
+                        >
+                          <Input placeholder="Enter PO no." />
+                        </Form.Item>
+                        <div>
+                          <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 4 }}>
+                            Need-by-date
+                          </Typography.Text>
+                          <Typography.Text strong>{formatDate(planNeedByDate)}</Typography.Text>
+                          <Typography.Text
+                            type="secondary"
+                            style={{ display: 'block', fontSize: 12, marginTop: 4 }}
+                          >
+                            From detachment plan
+                          </Typography.Text>
+                        </div>
+                      </ActionDetailFields>
+                    )}
                   </div>
+
                   <div
-                    className={`shortfall-action-row${
-                      selectedActions.includes('cannibalise') ? ' shortfall-action-row--selected' : ''
+                    className={`shortfall-action-block${
+                      selectedActions.includes('cannibalise')
+                        ? ' shortfall-action-block--selected'
+                        : ''
                     }`}
                   >
-                    <Checkbox value="cannibalise">Cannibalise</Checkbox>
-                    <ShortfallActionQtyField
-                      actionType="cannibalise"
-                      fieldName="cannQty"
-                      selectedActions={selectedActions}
-                      shortfallQty={shortfallQty}
-                    />
+                    <div className="shortfall-action-row">
+                      <Checkbox value="cannibalise">Cannibalise</Checkbox>
+                      <ShortfallActionQtyField
+                        actionType="cannibalise"
+                        fieldName="cannQty"
+                        selectedActions={selectedActions}
+                        shortfallQty={shortfallQty}
+                      />
+                    </div>
+                    {selectedActions.includes('cannibalise') && (
+                      <ActionDetailFields>
+                        <Form.Item
+                          name="cannTail"
+                          label="Aircraft tail #"
+                          rules={[{ required: true, message: 'Enter tail #' }]}
+                        >
+                          <Input placeholder="e.g. AF-2041" />
+                        </Form.Item>
+                        <Form.Item name="cannComments" label="Remarks">
+                          <Input.TextArea rows={2} />
+                        </Form.Item>
+                      </ActionDetailFields>
+                    )}
                   </div>
                 </Space>
               </Checkbox.Group>
             </Form.Item>
-
-            <Space direction="vertical" size={12} style={{ width: '100%', marginTop: 16 }}>
-              {selectedActions.includes('accept') && (
-                <ActionDetailCard title="Accept shortfall — details">
-                  <Form.Item name="acceptRemarks" label="Risk / remarks">
-                    <Input.TextArea rows={2} />
-                  </Form.Item>
-                </ActionDetailCard>
-              )}
-
-              {selectedActions.includes('wait') && (
-                <ActionDetailCard title="Wait — details">
-                  <Form.Item
-                    name="waitRef"
-                    label="Component PO no."
-                    rules={[{ required: true, message: 'Enter PO no.' }]}
-                  >
-                    <Input placeholder="Enter PO no." />
-                  </Form.Item>
-                  <div>
-                    <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 4 }}>
-                      Need-by-date
-                    </Typography.Text>
-                    <Typography.Text strong>{formatDate(planNeedByDate)}</Typography.Text>
-                    <Typography.Text type="secondary" style={{ display: 'block', fontSize: 12, marginTop: 4 }}>
-                      From detachment plan
-                    </Typography.Text>
-                  </div>
-                </ActionDetailCard>
-              )}
-
-              {selectedActions.includes('cannibalise') && (
-                <ActionDetailCard title="Cannibalise — details">
-                  <Form.Item
-                    name="cannTail"
-                    label="Aircraft tail #"
-                    rules={[{ required: true, message: 'Enter tail #' }]}
-                  >
-                    <Input placeholder="e.g. AF-2041" />
-                  </Form.Item>
-                  <Form.Item name="cannComments" label="Remarks">
-                    <Input.TextArea rows={2} />
-                  </Form.Item>
-                </ActionDetailCard>
-              )}
-            </Space>
           </div>
         )}
 

@@ -331,20 +331,41 @@ body {
   width: 100%;
 }
 
+.shortfall-action-block {
+  background: #fff;
+  border: 1px solid #ffccc7;
+  border-radius: 6px;
+  width: 100%;
+  overflow: hidden;
+}
+
+.shortfall-action-block--selected {
+  border-left: 3px solid #cf1322;
+}
+
 .shortfall-action-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
   padding: 10px 12px;
-  background: #fff;
-  border: 1px solid #ffccc7;
-  border-radius: 6px;
   width: 100%;
+  border: none;
+  background: transparent;
+  border-radius: 0;
 }
 
 .shortfall-action-row--selected {
-  border-left: 3px solid #cf1322;
+  border-left: none;
+}
+
+.shortfall-action-details {
+  padding: 16px 12px 12px;
+  border-top: 1px solid #ffe7e6;
+}
+
+.shortfall-action-details .ant-form-item:last-child {
+  margin-bottom: 0;
 }
 
 .shortfall-action-row .ant-checkbox-wrapper {
