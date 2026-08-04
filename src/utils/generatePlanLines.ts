@@ -165,7 +165,7 @@ export function applyDemoScenario(planId: string, lines: PlanLine[]): PlanLine[]
 
   patch('1560-01-246', {
     availableQty: 3,
-    toBringQty: 2,
+    toBringQty: 5,
     shortfallActions: [
       { type: 'wait', qty: 2, needByDate: '2026-03-01', repairComponentRef: 'PO2345678', approved: true },
     ],
