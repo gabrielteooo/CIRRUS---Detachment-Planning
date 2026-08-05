@@ -91,7 +91,7 @@ export default function ApprovalPackTab({
       ellipsis: true,
       render: (_: unknown, record: PlanLine) => formatShortfallActions(record.shortfallActions),
     },
-    getSummaryEditColumn<PlanLine>(viewOnly, onEditLine),
+    getSummaryEditColumn<PlanLine>(viewOnly, onEditLine, 'Edit'),
   ];
 
   const deviationColumns = [
@@ -114,7 +114,7 @@ export default function ApprovalPackTab({
       ellipsis: true,
       render: (v: string) => v ?? '—',
     },
-    getSummaryEditColumn<PlanLine>(viewOnly, onEditLine),
+    getSummaryEditColumn<PlanLine>(viewOnly, onEditLine, 'Edit'),
   ];
 
   return (
