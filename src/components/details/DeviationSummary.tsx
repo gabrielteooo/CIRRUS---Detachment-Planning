@@ -1,4 +1,4 @@
-import { Badge, Collapse, Table, Button, Checkbox, Typography } from 'antd';
+import { Badge, Collapse, Table, Typography } from 'antd';
 import type { PlanLine } from '../../types/planLine';
 import { getLineStatus } from '../../types/planLine';
 import type { Platform } from '../../types/detachment';
@@ -8,8 +8,10 @@ import {
   getRequiredColumn,
   getAvailableColumn,
   getAvailableColumnLinkRenderer,
-  getToBringColumn,
+  getSummaryToBringColumn,
+  getSummaryEditColumn,
   DETACHMENT_TABLE_LAYOUT,
+  FLEX_TEXT_COLUMN_MIN_WIDTH,
   DEVIATION_SUMMARY_SCROLL_X,
 } from './nsnTableColumns';
 
@@ -19,8 +21,8 @@ interface DeviationSummaryProps {
   variant: string;
   viewOnly: boolean;
   onEditLine: (line: PlanLine) => void;
-  onToggleApproval: (lineId: string, approved: boolean) => void;
   onViewInventory: (line: PlanLine) => void;
+  onViewNsn: (line: PlanLine) => void;
 }
 
 function DeviationHeader({ count }: { count: number }) {
@@ -44,51 +46,27 @@ export default function DeviationSummary({
   variant,
   viewOnly,
   onEditLine,
-  onToggleApproval,
   onViewInventory,
+  onViewNsn,
 }: DeviationSummaryProps) {
   const deviationLines = lines.filter((l) => getLineStatus(l) === 'Deviation');
 
   if (deviationLines.length === 0) return null;
 
   const columns = [
-    ...getNsnMpnDescriptionColumns<PlanLine>(),
+    ...getNsnMpnDescriptionColumns<PlanLine>(onViewNsn),
     getPlatformVariantColumn<PlanLine>(platform, variant),
     getRequiredColumn<PlanLine>(),
     getAvailableColumn<PlanLine>(getAvailableColumnLinkRenderer(onViewInventory)),
-    getToBringColumn<PlanLine>(),
+    getSummaryToBringColumn<PlanLine>(),
     {
-      title: 'Delta',
-      width: 70,
-      render: (_: unknown, record: PlanLine) => {
-        const delta = record.toBringQty - record.requiredQty;
-        return delta > 0 ? `+${delta}` : delta;
-      },
+      title: 'Reason',
+      dataIndex: 'deviationReason',
+      width: FLEX_TEXT_COLUMN_MIN_WIDTH,
+      ellipsis: true,
+      render: (v: string) => v ?? '—',
     },
-    { title: 'Reason', dataIndex: 'deviationReason', width: 220, render: (v: string) => v ?? '—' },
-    {
-      title: 'Offline approval',
-      key: 'approval',
-      width: 160,
-      render: (_: unknown, record: PlanLine) => (
-        <Checkbox
-          checked={record.deviationApproved ?? false}
-          disabled={viewOnly}
-          onChange={(e) => onToggleApproval(record.id, e.target.checked)}
-        />
-      ),
-    },
-    {
-      title: '',
-      key: 'edit',
-      width: 70,
-      render: (_: unknown, record: PlanLine) =>
-        !viewOnly ? (
-          <Button type="link" size="small" onClick={() => onEditLine(record)}>
-            Edit
-          </Button>
-        ) : null,
-    },
+    getSummaryEditColumn<PlanLine>(viewOnly, onEditLine),
   ];
 
   return (

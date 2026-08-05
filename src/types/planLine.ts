@@ -4,6 +4,11 @@ export type ShortfallActionType = 'accept' | 'wait' | 'cannibalise';
 
 export type DeviationReason = string;
 
+export interface OfflineApprovalRecord {
+  approverName: string;
+  approvedDate: string;
+}
+
 export type InventoryStatus = 'In WH' | 'Blocked' | 'QI' | 'QIT';
 
 export interface InventoryItem {
@@ -73,7 +78,9 @@ export interface PlanLine {
   shortfallActions: ShortfallAction[];
   deviationReason?: DeviationReason;
   deviationRemarks?: string;
+  /** @deprecated Use offlineApproval */
   deviationApproved?: boolean;
+  offlineApproval?: OfflineApprovalRecord;
   /** User-added NSN for exercise needs; not from L-series template. */
   isAddedNsn?: boolean;
   interchangeableMembers?: InterchangeableMember[];
@@ -95,13 +102,22 @@ export function formatLineStatus(status: LineStatus): string {
 }
 
 export function getLineStatus(line: PlanLine): LineStatus {
-  if (line.availableQty < line.requiredQty) return 'Shortfall';
+  if (getGroupAvailableQty(line) < line.requiredQty) return 'Shortfall';
   if (line.isAddedNsn || line.toBringQty > line.requiredQty) return 'Deviation';
   return 'Met';
 }
 
 export function getShortfallQty(line: PlanLine): number {
-  return Math.max(0, line.requiredQty - line.availableQty);
+  return Math.max(0, line.requiredQty - getGroupAvailableQty(line));
+}
+
+/** True when stock exceeds L-series requirement and user may bring extra qty (deviation). */
+export function canDeviateQty(line: PlanLine): boolean {
+  return (
+    !line.isAddedNsn &&
+    getLineStatus(line) !== 'Shortfall' &&
+    getGroupAvailableQty(line) > line.requiredQty
+  );
 }
 
 export function computeFillRate(lines: PlanLine[]): number {
@@ -122,6 +138,34 @@ export function countCannibalisation(lines: PlanLine[]): number {
   return lines.filter((l) =>
     l.shortfallActions.some((a) => a.type === 'cannibalise'),
   ).length;
+}
+
+export function hasNonAcceptShortfallResolution(line: PlanLine): boolean {
+  return line.shortfallActions.some(
+    (action) => action.type === 'wait' || action.type === 'cannibalise',
+  );
+}
+
+export function computeShortfallResolvedProgress(
+  lines: PlanLine[],
+): { resolved: number; total: number } {
+  const shortfallLines = lines.filter((l) => getLineStatus(l) === 'Shortfall');
+  const resolved = shortfallLines.filter(hasResolutionRecorded).length;
+  return { resolved, total: shortfallLines.length };
+}
+
+/** Distinct aircraft tail numbers used in cannibalise resolution actions. */
+export function countAircraftCannibalised(lines: PlanLine[]): number {
+  const tails = new Set<string>();
+  for (const line of lines) {
+    for (const action of line.shortfallActions) {
+      if (action.type === 'cannibalise') {
+        const tail = action.tailNumber.trim();
+        if (tail) tails.add(tail);
+      }
+    }
+  }
+  return tails.size;
 }
 
 export function computePlanStatus(lines: PlanLine[]): 'Draft' | 'Partially Approved' | 'Approved' {
@@ -166,7 +210,7 @@ export function computeToBringFromShortfallActions(actions: ShortfallAction[]): 
 export function formatShortfallActions(actions: ShortfallAction[]): string {
   const labels: Record<ShortfallActionType, string> = {
     accept: 'Accept shortfall',
-    wait: 'Wait (expedite repair/new buys)',
+    wait: 'Wait',
     cannibalise: 'Cannibalise',
   };
   return (
@@ -177,6 +221,10 @@ export function formatShortfallActions(actions: ShortfallAction[]): string {
       })
       .join(', ') || '—'
   );
+}
+
+export function isShortfallUnresolved(line: PlanLine): boolean {
+  return getLineStatus(line) === 'Shortfall' && line.shortfallActions.length === 0;
 }
 
 export function isInterchangeableLine(line: PlanLine): boolean {
@@ -217,6 +265,13 @@ export function allShortfallActionsApproved(actions: ShortfallAction[]): boolean
   return actions.length > 0 && actions.every((a) => a.approved);
 }
 
+export function hasResolutionRecorded(line: PlanLine): boolean {
+  const status = getLineStatus(line);
+  if (status === 'Shortfall') return line.shortfallActions.length > 0;
+  if (status === 'Deviation') return !!(line.isAddedNsn || line.deviationReason?.trim());
+  return false;
+}
+
 export function lineNeedsApproval(line: PlanLine): boolean {
   const status = getLineStatus(line);
   if (status === 'Shortfall') return line.shortfallActions.length > 0;
@@ -228,9 +283,15 @@ export function lineNeedsApproval(line: PlanLine): boolean {
 }
 
 export function isLineApprovalComplete(line: PlanLine): boolean {
-  const status = getLineStatus(line);
-  if (status === 'Shortfall') return allShortfallActionsApproved(line.shortfallActions);
-  if (status === 'Deviation') return line.deviationApproved === true;
+  if (!lineNeedsApproval(line)) return false;
+
+  const approval = line.offlineApproval;
+  if (approval?.approverName?.trim() && approval.approvedDate) {
+    return true;
+  }
+
+  // Legacy demo data: deviationApproved flag for deviations without offlineApproval record
+  if (getLineStatus(line) === 'Deviation') return line.deviationApproved === true;
   return false;
 }
 
@@ -238,4 +299,93 @@ export function computeApprovalProgress(lines: PlanLine[]): { approved: number; 
   const needingApproval = lines.filter(lineNeedsApproval);
   const approved = needingApproval.filter(isLineApprovalComplete).length;
   return { approved, total: needingApproval.length };
+}
+
+export type LineApprovalStatus = 'unresolved' | 'unapproved' | 'approved';
+
+export function getLineApprovalStatus(line: PlanLine): LineApprovalStatus {
+  const status = getLineStatus(line);
+
+  if (status === 'Shortfall') {
+    if (isShortfallUnresolved(line)) return 'unresolved';
+    if (isLineApprovalComplete(line)) return 'approved';
+    return 'unapproved';
+  }
+
+  if (status === 'Deviation') {
+    if (!hasResolutionRecorded(line)) return 'unresolved';
+    if (isLineApprovalComplete(line)) return 'approved';
+    return 'unapproved';
+  }
+
+  return 'approved';
+}
+
+export function formatLineApprovalStatus(status: LineApprovalStatus): string {
+  const labels: Record<LineApprovalStatus, string> = {
+    unresolved: 'Action required',
+    unapproved: 'Pending Approval',
+    approved: 'Approved',
+  };
+  return labels[status];
+}
+
+export function sortShortfallLinesByApproval(lines: PlanLine[]): PlanLine[] {
+  const rank = (line: PlanLine): number => {
+    const approval = getLineApprovalStatus(line);
+    if (approval === 'unresolved') return 0;
+    if (approval === 'unapproved') return 1;
+    return 2;
+  };
+  return [...lines].sort((a, b) => rank(a) - rank(b));
+}
+
+/** Shortfalls without resolution — work queue only; deviations are excluded. */
+export function getWorkQueueLines(lines: PlanLine[]): PlanLine[] {
+  return lines.filter(isShortfallUnresolved);
+}
+
+/** Shortfalls and deviations with resolution recorded (pending or approved). */
+export function getApprovalPackLines(
+  lines: PlanLine[],
+  filter: 'pending' | 'approved' = 'pending',
+): {
+  shortfalls: PlanLine[];
+  deviations: PlanLine[];
+} {
+  const withResolution = lines.filter(
+    (l) =>
+      hasResolutionRecorded(l) &&
+      lineNeedsApproval(l) &&
+      getLineApprovalStatus(l) !== 'unresolved',
+  );
+
+  const filtered =
+    filter === 'pending'
+      ? withResolution.filter((l) => getLineApprovalStatus(l) === 'unapproved')
+      : withResolution.filter((l) => getLineApprovalStatus(l) === 'approved');
+
+  return {
+    shortfalls: filtered.filter((l) => getLineStatus(l) === 'Shortfall'),
+    deviations: filtered.filter((l) => getLineStatus(l) === 'Deviation'),
+  };
+}
+
+export function countApprovalPackLines(lines: PlanLine[]): number {
+  return getApprovalPackLines(lines, 'pending').shortfalls.length +
+    getApprovalPackLines(lines, 'pending').deviations.length;
+}
+
+export function countApprovedPackLines(lines: PlanLine[]): number {
+  return getApprovalPackLines(lines, 'approved').shortfalls.length +
+    getApprovalPackLines(lines, 'approved').deviations.length;
+}
+
+export function countWorkQueueLines(lines: PlanLine[]): number {
+  return getWorkQueueLines(lines).length;
+}
+
+export function getDeviationDelta(line: PlanLine): number {
+  if (line.isAddedNsn) return line.toBringQty;
+  return line.toBringQty - line.requiredQty;
 }

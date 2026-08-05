@@ -1,10 +1,11 @@
-import { Badge, Collapse, Table, Button, Checkbox, Typography } from 'antd';
+import { useMemo } from 'react';
+import { Badge, Collapse, Table, Typography } from 'antd';
 import type { PlanLine } from '../../types/planLine';
 import {
-  allShortfallActionsApproved,
   formatShortfallActions,
   getLineStatus,
   getShortfallQty,
+  sortShortfallLinesByApproval,
 } from '../../types/planLine';
 import type { Platform } from '../../types/detachment';
 import {
@@ -13,8 +14,11 @@ import {
   getRequiredColumn,
   getAvailableColumn,
   getAvailableColumnLinkRenderer,
+  getSummaryEditColumn,
   DETACHMENT_TABLE_LAYOUT,
-  DETACHMENT_TABLE_SCROLL_X,
+  FLEX_TEXT_COLUMN_MIN_WIDTH,
+  SUMMARY_SEVENTH_COLUMN_WIDTH,
+  SHORTFALL_SUMMARY_SCROLL_X,
 } from './nsnTableColumns';
 
 interface ShortfallSummaryProps {
@@ -23,8 +27,8 @@ interface ShortfallSummaryProps {
   variant: string;
   viewOnly: boolean;
   onEditLine: (line: PlanLine) => void;
-  onToggleApproval: (lineId: string, approved: boolean) => void;
   onViewInventory: (line: PlanLine) => void;
+  onViewNsn: (line: PlanLine) => void;
 }
 
 function ShortfallHeader({ count }: { count: number }) {
@@ -48,54 +52,34 @@ export default function ShortfallSummary({
   variant,
   viewOnly,
   onEditLine,
-  onToggleApproval,
   onViewInventory,
+  onViewNsn,
 }: ShortfallSummaryProps) {
-  const shortfallLines = lines.filter((l) => getLineStatus(l) === 'Shortfall');
+  const shortfallLines = useMemo(
+    () => sortShortfallLinesByApproval(lines.filter((l) => getLineStatus(l) === 'Shortfall')),
+    [lines],
+  );
 
   if (shortfallLines.length === 0) return null;
 
   const columns = [
-    ...getNsnMpnDescriptionColumns<PlanLine>(),
+    ...getNsnMpnDescriptionColumns<PlanLine>(onViewNsn),
     getPlatformVariantColumn<PlanLine>(platform, variant),
     getRequiredColumn<PlanLine>(),
     getAvailableColumn<PlanLine>(getAvailableColumnLinkRenderer(onViewInventory)),
     {
       title: 'Shortfall',
-      width: 100,
+      width: SUMMARY_SEVENTH_COLUMN_WIDTH,
       render: (_: unknown, record: PlanLine) => getShortfallQty(record),
     },
     {
-      title: 'Actions taken',
+      title: 'Resolution',
       key: 'actions',
+      width: FLEX_TEXT_COLUMN_MIN_WIDTH,
+      ellipsis: true,
       render: (_: unknown, record: PlanLine) => formatShortfallActions(record.shortfallActions),
     },
-    {
-      title: 'Offline approval',
-      key: 'approval',
-      width: 160,
-      render: (_: unknown, record: PlanLine) =>
-        record.shortfallActions.length > 0 ? (
-          <Checkbox
-            checked={allShortfallActionsApproved(record.shortfallActions)}
-            disabled={viewOnly}
-            onChange={(e) => onToggleApproval(record.id, e.target.checked)}
-          />
-        ) : (
-          '—'
-        ),
-    },
-    {
-      title: '',
-      key: 'edit',
-      width: 70,
-      render: (_: unknown, record: PlanLine) =>
-        !viewOnly ? (
-          <Button type="link" size="small" onClick={() => onEditLine(record)}>
-            Edit
-          </Button>
-        ) : null,
-    },
+    getSummaryEditColumn<PlanLine>(viewOnly, onEditLine),
   ];
 
   return (
@@ -115,7 +99,7 @@ export default function ShortfallSummary({
                 pagination={false}
                 size="small"
                 tableLayout={DETACHMENT_TABLE_LAYOUT}
-                scroll={{ x: DETACHMENT_TABLE_SCROLL_X }}
+                scroll={{ x: SHORTFALL_SUMMARY_SCROLL_X }}
               />
             </div>
           ),

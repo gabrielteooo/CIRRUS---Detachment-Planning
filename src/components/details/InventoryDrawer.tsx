@@ -1,6 +1,7 @@
 import { Drawer, Table, Typography } from 'antd';
 import type { PlanLine } from '../../types/planLine';
 import { getGroupAvailableQty, isInterchangeableLine } from '../../types/planLine';
+import { QTY_COLUMN_WIDTH } from './nsnTableColumns';
 
 interface InventoryDrawerProps {
   line: PlanLine | null;
@@ -46,10 +47,19 @@ export default function InventoryDrawer({ line, open, onClose }: InventoryDrawer
   const rows = buildInventoryRows(line);
 
   const columns = [
-    { title: 'NSN', dataIndex: 'nsn', width: 140, ellipsis: true },
-    { title: 'Description', dataIndex: 'description', ellipsis: true },
-    { title: 'Available', dataIndex: 'availableQty', width: 88 },
-    { title: 'To-bring', dataIndex: 'toBringQty', width: 88 },
+    {
+      title: 'NSN',
+      dataIndex: 'nsn',
+      width: 120,
+      ellipsis: true,
+    },
+    {
+      title: 'Description',
+      dataIndex: 'description',
+      ellipsis: true,
+    },
+    { title: 'Available', dataIndex: 'availableQty', width: QTY_COLUMN_WIDTH },
+    { title: 'To-bring', dataIndex: 'toBringQty', width: QTY_COLUMN_WIDTH },
   ];
 
   return (
@@ -86,7 +96,7 @@ export default function InventoryDrawer({ line, open, onClose }: InventoryDrawer
         </div>
       </div>
 
-      <div className="detachment-table-container" style={{ marginTop: 16 }}>
+      <div className="inventory-drawer-table" style={{ marginTop: 16 }}>
         <Table
           dataSource={rows}
           columns={columns}

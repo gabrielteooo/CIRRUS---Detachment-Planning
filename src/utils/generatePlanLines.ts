@@ -136,15 +136,22 @@ export function applyDemoScenario(planId: string, lines: PlanLine[]): PlanLine[]
   patch('1560-01-232', {
     availableQty: 0,
     toBringQty: 0,
-    deviationReason: 'Accepting risk due to shortfall',
-    deviationRemarks: 'Reduced qty based on exercise duration',
-    deviationApproved: false,
     inventory: [
       { type: 'Main', nsn: '1560-01-232', description: 'Fuel Control Unit, Main Engine', location: 'WH-A / Rack 7', qty: 0, status: 'QI' },
     ],
     shortfallActions: [
-      { type: 'accept', qty: 1, remarks: 'Accept operational risk — reduced sortie rate agreed', approved: true },
+      {
+        type: 'accept',
+        qty: 1,
+        remarks: 'Accept operational risk — reduced sortie rate agreed',
+        approved: false,
+      },
     ],
+  });
+
+  patch('1560-01-230', {
+    availableQty: 6,
+    toBringQty: 5,
   });
 
   patch('1560-01-245', {
@@ -152,7 +159,10 @@ export function applyDemoScenario(planId: string, lines: PlanLine[]): PlanLine[]
     toBringQty: (lines.find((l) => l.nsn === '1560-01-245')?.requiredQty ?? 20) + 5,
     deviationReason: 'Exercise needs',
     deviationRemarks: 'Additional fasteners for extended deployment',
-    deviationApproved: true,
+    offlineApproval: {
+      approverName: 'MAJ Chen Li Hua',
+      approvedDate: '2026-02-10',
+    },
   });
 
   patch('1560-01-241', {
@@ -169,6 +179,10 @@ export function applyDemoScenario(planId: string, lines: PlanLine[]): PlanLine[]
     shortfallActions: [
       { type: 'wait', qty: 2, needByDate: '2026-03-01', repairComponentRef: 'PO2345678', approved: true },
     ],
+    offlineApproval: {
+      approverName: 'LTC Tan Wei Ming',
+      approvedDate: '2026-02-12',
+    },
   });
 
   const igniterIdx = lines.findIndex((l) => l.nsn === '1560-01-233');

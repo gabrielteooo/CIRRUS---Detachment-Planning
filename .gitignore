@@ -1,4 +1,6 @@
 node_modules
 dist
+share
 .DS_Store
 *.local
+CIRRUS-Detachment-Planning-demo.html

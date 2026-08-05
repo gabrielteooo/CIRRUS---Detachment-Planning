@@ -63,6 +63,39 @@ body {
   border-top: 1px solid #e8e8e8;
 }
 
+.approval-pack-tab-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.approval-pack-tab-section {
+  margin-bottom: 24px;
+}
+
+.plan-details-tabs {
+  background: #fff;
+  border: 1px solid #f0f0f0;
+  border-radius: 8px;
+  padding: 0 20px 20px;
+}
+
+.plan-details-tabs .ant-tabs-nav {
+  margin-bottom: 16px;
+}
+
+@media print {
+  .approval-pack-tab-toolbar,
+  .plan-details-kpi,
+  .ant-tabs-nav,
+  .plan-details-content > div:first-child {
+    display: none !important;
+  }
+}
+
 .lseries-section {
   background: #fff;
   border: 1px solid #f0f0f0;
@@ -110,6 +143,17 @@ body {
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
+}
+
+.inventory-drawer-table {
+  border: 1px solid #f0f0f0;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.inventory-drawer-table .ant-table table {
+  table-layout: fixed;
+  width: 100%;
 }
 
 .summary-collapse-shortfall,
@@ -167,17 +211,79 @@ body {
 .detachment-table-container {
   border: 1px solid #f0f0f0;
   border-radius: 4px;
-  overflow: hidden;
+  overflow: auto;
+  max-width: 100%;
+}
+
+.detachment-table-container .ant-table-wrapper {
+  min-width: 0;
 }
 
 .detachment-table-container .ant-table table {
   table-layout: fixed;
 }
 
-.available-qty-link {
+/* NSN / MPN / Description stay fixed when viewport stretches the table */
+.detachment-table-container .ant-table colgroup col:nth-child(1) {
+  width: 120px !important;
+}
+
+.detachment-table-container .ant-table colgroup col:nth-child(2) {
+  width: 120px !important;
+}
+
+.detachment-table-container .ant-table colgroup col:nth-child(3) {
+  width: 260px !important;
+}
+
+.available-qty-link,
+.nsn-link {
   text-decoration: underline !important;
   text-underline-offset: 2px;
   font-weight: 600;
+}
+
+.approval-status-tag {
+  color: rgba(0, 0, 0, 0.65) !important;
+  background: #fafafa !important;
+  border-color: #d9d9d9 !important;
+}
+
+.approval-status-tag .anticon {
+  color: rgba(0, 0, 0, 0.45);
+}
+
+.nsn-drilldown-modal .ant-modal-body {
+  padding-top: 8px;
+}
+
+.nsn-drilldown-tabs .ant-tabs-nav {
+  margin-bottom: 12px;
+}
+
+.nsn-drilldown-table-container {
+  border: 1px solid #f0f0f0;
+  border-radius: 8px;
+  overflow: auto;
+  max-width: 100%;
+}
+
+.nsn-drilldown-copy-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.nsn-drilldown-copy-btn {
+  color: rgba(0, 0, 0, 0.45) !important;
+  padding: 0 4px !important;
+  height: 22px !important;
+}
+
+.new-buy-status-tag {
+  color: rgba(0, 0, 0, 0.65) !important;
+  background: #fffbe6 !important;
+  border-color: #ffe58f !important;
 }
 
 /* Primary brand colour for interactive controls */
@@ -226,52 +332,50 @@ body {
   text-align: center;
 }
 
-.edit-line-qty-panel {
-  background: #f5f8f8;
-  border: 2px solid #00636a;
-  border-radius: 8px;
-  padding: 16px 20px;
-  margin-bottom: 24px;
+.edit-line-status-tag {
+  font-size: 16px !important;
+  font-weight: 600;
+  padding: 4px 14px !important;
+  margin: 0 0 20px !important;
 }
 
-.edit-line-qty-panel-title {
+.edit-line-qty-row-section {
+  margin-bottom: 20px;
+}
+
+.edit-line-qty-row-label {
   display: block;
-  margin-bottom: 4px;
-  font-size: 15px;
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
 }
 
-.edit-line-qty-panel-subtitle {
-  display: block;
-  margin-bottom: 16px;
-  font-size: 13px;
-}
-
-.edit-line-qty-reference {
+.edit-line-qty-row {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-  margin-bottom: 16px;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 10px;
 }
 
-.edit-line-qty-stat {
-  background: #fff;
-  border: 1px solid #e8eded;
+.edit-line-qty-cell {
+  background: #fafafa;
+  border: 1px solid #f0f0f0;
   border-radius: 6px;
-  padding: 12px 14px;
+  padding: 10px 12px;
   text-align: center;
 }
 
-.edit-line-qty-stat--warning {
+.edit-line-qty-cell--warning {
   border-color: #ffd591;
   background: #fffbe6;
 }
 
-.edit-line-qty-stat--success {
-  border-color: #b7eb8f;
-  background: #f6ffed;
+.edit-line-qty-cell--input {
+  background: #fff;
 }
 
-.edit-line-qty-stat-label {
+.edit-line-qty-cell-label {
   display: block;
   margin-bottom: 4px;
   font-size: 11px;
@@ -281,24 +385,64 @@ body {
   color: rgba(0, 0, 0, 0.45);
 }
 
-.edit-line-qty-stat-value {
+.edit-line-qty-cell-value {
   display: block;
-  font-size: 28px;
+  font-size: 20px;
   font-weight: 600;
   line-height: 1.2;
   color: rgba(0, 0, 0, 0.88);
 }
 
-.edit-line-to-bring-field {
-  margin-bottom: 0 !important;
+.edit-line-qty-cell-input {
+  width: 100% !important;
 }
 
-.edit-line-to-bring-field .ant-form-item-label > label {
+.edit-line-qty-cell-input .ant-input-number-input {
+  font-size: 20px;
   font-weight: 600;
+  text-align: center;
 }
 
-.edit-line-type-section {
-  margin-bottom: 20px;
+.edit-line-offline-approval {
+  background: #f5f8f8;
+  border: 1px solid #d9e8e9;
+  border-radius: 8px;
+  padding: 16px 18px;
+  margin-top: 8px;
+}
+
+.edit-line-offline-approval-title {
+  display: block;
+  font-size: 15px;
+  margin-bottom: 4px;
+}
+
+.edit-line-offline-approval-subtitle {
+  display: block;
+  margin-bottom: 16px;
+  font-size: 13px;
+}
+
+.edit-line-offline-approval-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.edit-line-offline-approval-row .ant-form-item {
+  margin-bottom: 0;
+}
+
+.shortfall-resolution-title {
+  font-size: 15px;
+  display: block;
+  margin-bottom: 4px;
+}
+
+.shortfall-resolution-subtitle {
+  display: block;
+  margin-bottom: 16px;
+  font-size: 13px;
 }
 
 .interchangeable-allocation-panel {
@@ -327,6 +471,20 @@ body {
   padding: 16px 20px;
 }
 
+.deviation-available-panel {
+  background: #fffbe6;
+  border: 1px solid #ffe58f;
+  border-left: 4px solid #d48806;
+  border-radius: 8px;
+  padding: 14px 16px;
+  margin-top: 8px;
+}
+
+.deviation-available-panel-title {
+  display: block;
+  margin-bottom: 6px;
+}
+
 .shortfall-action-checkboxes {
   width: 100%;
 }
@@ -345,7 +503,7 @@ body {
 
 .shortfall-action-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
   padding: 10px 12px;
@@ -353,6 +511,19 @@ body {
   border: none;
   background: transparent;
   border-radius: 0;
+}
+
+.shortfall-action-row-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.shortfall-action-description {
+  display: block;
+  margin-top: 2px;
+  padding-left: 24px;
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 .shortfall-action-row--selected {
@@ -380,6 +551,7 @@ body {
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
+  padding-top: 2px;
 }
 
 .shortfall-action-card {

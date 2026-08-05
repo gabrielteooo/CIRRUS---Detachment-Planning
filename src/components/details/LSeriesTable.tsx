@@ -11,6 +11,8 @@ import {
   getAvailableColumn,
   getAvailableColumnLinkRenderer,
   getToBringColumn,
+  ACTION_COLUMN_WIDTH,
+  STATUS_COLUMN_WIDTH,
   DETACHMENT_TABLE_LAYOUT,
   DETACHMENT_TABLE_SCROLL_X,
 } from './nsnTableColumns';
@@ -22,6 +24,7 @@ interface LSeriesTableProps {
   viewOnly: boolean;
   onEditLine: (line: PlanLine) => void;
   onViewInventory: (line: PlanLine) => void;
+  onViewNsn: (line: PlanLine) => void;
   onAddNsn?: () => void;
   onDeleteLine?: (line: PlanLine) => void;
 }
@@ -45,6 +48,7 @@ export default function LSeriesTable({
   viewOnly,
   onEditLine,
   onViewInventory,
+  onViewNsn,
   onAddNsn,
   onDeleteLine,
 }: LSeriesTableProps) {
@@ -76,7 +80,7 @@ export default function LSeriesTable({
   }, [sortedLines, search, statusFilter]);
 
   const columns = [
-    ...getNsnMpnDescriptionColumns<PlanLine>(),
+    ...getNsnMpnDescriptionColumns<PlanLine>(onViewNsn),
     getPlatformVariantColumn<PlanLine>(platform, variant),
     getRequiredColumn<PlanLine>(),
     getAvailableColumn<PlanLine>(getAvailableColumnLinkRenderer(onViewInventory)),
@@ -84,7 +88,7 @@ export default function LSeriesTable({
     {
       title: 'Status',
       key: 'status',
-      width: 110,
+      width: STATUS_COLUMN_WIDTH,
       render: (_: unknown, record: PlanLine) => {
         const status = getLineStatus(record);
         return <Tag color={STATUS_COLORS[status]}>{formatLineStatus(status)}</Tag>;
@@ -93,14 +97,18 @@ export default function LSeriesTable({
     {
       title: 'Action',
       key: 'action',
-      width: 120,
+      width: ACTION_COLUMN_WIDTH,
+      fixed: 'right' as const,
       render: (_: unknown, record: PlanLine) => {
         if (viewOnly) return null;
 
+        const status = getLineStatus(record);
+        const actionLabel = status === 'Shortfall' ? 'Resolve' : 'Deviate';
+
         return (
-          <Space size={4}>
+          <Space size={4} wrap>
             <Button type="link" size="small" onClick={() => onEditLine(record)}>
-              Edit
+              {actionLabel}
             </Button>
             {record.isAddedNsn && onDeleteLine && (
               <Popconfirm

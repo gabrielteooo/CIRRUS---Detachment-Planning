@@ -68,7 +68,6 @@ export function createAddedPlanLine(
     shortfallActions: [],
     isAddedNsn: true,
     deviationReason,
-    deviationApproved: false,
   };
 }
 

@@ -3,8 +3,9 @@ import type { PlanLine } from '../../types/planLine';
 import {
   computeApprovalProgress,
   computeFillRate,
+  computeShortfallResolvedProgress,
+  countAircraftCannibalised,
   countDeviations,
-  countShortfalls,
 } from '../../types/planLine';
 import { fillRateColor } from '../../data/mockPlans';
 
@@ -14,10 +15,14 @@ interface KpiStripProps {
 
 export default function KpiStrip({ lines }: KpiStripProps) {
   const fillRate = computeFillRate(lines);
-  const shortfalls = countShortfalls(lines);
-  const deviations = countDeviations(lines);
+  const { resolved: shortfallsResolved, total: shortfallTotal } =
+    computeShortfallResolvedProgress(lines);
   const { approved, total } = computeApprovalProgress(lines);
+  const aircraftCannibalised = countAircraftCannibalised(lines);
+  const deviations = countDeviations(lines);
   const allApproved = total > 0 && approved === total;
+  const allShortfallsResolved =
+    shortfallTotal > 0 && shortfallsResolved === shortfallTotal;
 
   return (
     <Row gutter={16} style={{ marginBottom: 24 }}>
@@ -34,24 +39,19 @@ export default function KpiStrip({ lines }: KpiStripProps) {
       <Col xs={12} sm={8} flex="1 1 0">
         <Card size="small" style={{ height: '100%' }}>
           <Statistic
-            title="Shortfalls"
-            value={shortfalls}
-            valueStyle={{ color: shortfalls > 0 ? '#cf1322' : undefined }}
+            title="Shortfall resolved"
+            value={`${shortfallsResolved}/${shortfallTotal}`}
+            valueStyle={{
+              color: allShortfallsResolved
+                ? '#00636a'
+                : shortfallsResolved > 0
+                  ? '#d48806'
+                  : shortfallTotal > 0
+                    ? '#cf1322'
+                    : undefined,
+              fontSize: 24,
+            }}
           />
-        </Card>
-      </Col>
-      <Col xs={12} sm={8} flex="1 1 0">
-        <Card size="small" style={{ height: '100%' }}>
-          <Statistic
-            title="Deviations"
-            value={deviations}
-            valueStyle={{ color: deviations > 0 ? '#d48806' : undefined }}
-          />
-        </Card>
-      </Col>
-      <Col xs={12} sm={8} flex="1 1 0">
-        <Card size="small" style={{ height: '100%' }}>
-          <Statistic title="Total NSN lines" value={lines.length} />
         </Card>
       </Col>
       <Col xs={12} sm={8} flex="1 1 0">
@@ -69,6 +69,21 @@ export default function KpiStrip({ lines }: KpiStripProps) {
               Fully approved
             </Typography.Text>
           )}
+        </Card>
+      </Col>
+      <Col xs={12} sm={8} flex="1 1 0">
+        <Card size="small" style={{ height: '100%' }}>
+          <Statistic title="Aircraft cannibalised" value={aircraftCannibalised} />
+        </Card>
+      </Col>
+      <Col xs={12} sm={8} flex="1 1 0">
+        <Card size="small" style={{ height: '100%' }}>
+          <Statistic title="Deviations" value={deviations} />
+        </Card>
+      </Col>
+      <Col xs={12} sm={8} flex="1 1 0">
+        <Card size="small" style={{ height: '100%' }}>
+          <Statistic title="NSN lines" value={lines.length} />
         </Card>
       </Col>
     </Row>

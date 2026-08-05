@@ -1,4 +1,6 @@
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, HashRouter, Navigate, Route, Routes } from 'react-router-dom';
+
+const Router = import.meta.env.VITE_HASH_ROUTER ? HashRouter : BrowserRouter;
 import { ConfigProvider } from 'antd';
 import AppShell from './components/layout/AppShell';
 import PlanListPage from './pages/PlanListPage';
@@ -44,7 +46,7 @@ export default function App() {
   return (
     <ConfigProvider theme={theme}>
       <AppProvider>
-        <BrowserRouter>
+        <Router>
           <Routes>
             <Route element={<AppShell />}>
               <Route path="/" element={<Navigate to="/detachment-planning" replace />} />
@@ -53,7 +55,7 @@ export default function App() {
               <Route path="/detachment-planning/plan/:planId" element={<PlanDetailsPage />} />
             </Route>
           </Routes>
-        </BrowserRouter>
+        </Router>
       </AppProvider>
     </ConfigProvider>
   );

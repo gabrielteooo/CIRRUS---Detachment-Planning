@@ -9,8 +9,10 @@ import {
   Typography,
   Button,
   Space,
+  DatePicker,
   message,
 } from 'antd';
+import dayjs from 'dayjs';
 import { useEffect, type ReactNode } from 'react';
 import type {
   LineStatus,
@@ -21,10 +23,13 @@ import type {
 import {
   formatLineStatus,
   computeToBringQty,
+  canDeviateQty,
   getGroupAvailableQty,
   getPrimaryMemberNsn,
   getShortfallQty,
+  hasResolutionRecorded,
   isInterchangeableLine,
+  lineNeedsApproval,
 } from '../../types/planLine';
 import { formatDate } from '../../utils/planUtils';
 
@@ -45,36 +50,19 @@ const STATUS_TAG_COLORS: Record<LineStatus, string> = {
 };
 
 function resolveLineMode(line: PlanLine, toBringQty: number): LineMode | null {
-  if (line.availableQty < line.requiredQty) return 'shortfall';
+  if (getGroupAvailableQty(line) < line.requiredQty) return 'shortfall';
   if (line.isAddedNsn || toBringQty > line.requiredQty) return 'deviation';
   return null;
 }
 
 function resolveLineStatus(line: PlanLine, toBringQty: number): LineStatus {
-  if (line.availableQty < line.requiredQty) return 'Shortfall';
+  if (getGroupAvailableQty(line) < line.requiredQty) return 'Shortfall';
   if (line.isAddedNsn || toBringQty > line.requiredQty) return 'Deviation';
   return 'Met';
 }
 
 function ActionDetailFields({ children }: { children: ReactNode }) {
   return <div className="shortfall-action-details">{children}</div>;
-}
-
-function QtyReferenceStat({
-  label,
-  value,
-  tone = 'default',
-}: {
-  label: string;
-  value: number;
-  tone?: 'default' | 'warning' | 'success';
-}) {
-  return (
-    <div className={`edit-line-qty-stat edit-line-qty-stat--${tone}`}>
-      <Typography.Text className="edit-line-qty-stat-label">{label}</Typography.Text>
-      <Typography.Text className="edit-line-qty-stat-value">{value}</Typography.Text>
-    </div>
-  );
 }
 
 function ShortfallActionQtyField({
@@ -141,12 +129,14 @@ export default function EditLineDrawer({
       const cannAction = line.shortfallActions.find((a) => a.type === 'cannibalise');
       const defaultQty = getShortfallQty(line) || 1;
 
+      const groupAvail = getGroupAvailableQty(line);
+      const isShortfall = groupAvail < line.requiredQty;
+      const defaultToBring = isShortfall
+        ? computeToBringQty(line, line.shortfallActions)
+        : line.toBringQty;
+
       form.setFieldsValue({
-        toBringQty:
-          line.availableQty < line.requiredQty ||
-          getGroupAvailableQty(line) < line.requiredQty
-            ? computeToBringQty(line, line.shortfallActions)
-            : line.toBringQty,
+        toBringQty: defaultToBring,
         deviationReason: line.deviationReason,
         shortfallTargetNsn:
           waitAction?.targetNsn ??
@@ -162,6 +152,10 @@ export default function EditLineDrawer({
         cannQty: cannAction?.qty ?? defaultQty,
         cannTail: cannAction?.type === 'cannibalise' ? cannAction.tailNumber : '',
         cannComments: cannAction?.type === 'cannibalise' ? cannAction.workCentreComments : '',
+        approverName: line.offlineApproval?.approverName ?? '',
+        approvedDate: line.offlineApproval?.approvedDate
+          ? dayjs(line.offlineApproval.approvedDate)
+          : undefined,
       });
     }
   }, [line, open, form]);
@@ -201,11 +195,44 @@ export default function EditLineDrawer({
 
   const isGroup = isInterchangeableLine(line);
   const groupAvailable = getGroupAvailableQty(line);
-
   const currentToBringResolved = toBringQty ?? line.toBringQty;
   const lineStatus = resolveLineStatus(line, currentToBringResolved);
   const shortfallQty = getShortfallQty(line);
   const selectedActions = shortfallActionTypes ?? [];
+  const toBringReadOnly = lineMode === 'shortfall';
+  const showDeviationHint = lineMode === null && canDeviateQty(line);
+
+  const previewLine: PlanLine = {
+    ...line,
+    toBringQty: currentToBringResolved,
+    shortfallActions:
+      lineMode === 'shortfall'
+        ? selectedActions.map((type) => {
+            if (type === 'accept') return { type, qty: acceptQty ?? 1, remarks: '', approved: false };
+            if (type === 'wait') {
+              return {
+                type,
+                qty: waitQty ?? 1,
+                repairComponentRef: '',
+                needByDate: planNeedByDate,
+                approved: false,
+              };
+            }
+            return {
+              type: 'cannibalise',
+              qty: cannQty ?? 1,
+              tailNumber: '',
+              workCentreComments: '',
+              confirmedWithWorkCentre: true,
+              approved: false,
+            };
+          })
+        : line.shortfallActions,
+    deviationReason: lineMode === 'deviation' ? form.getFieldValue('deviationReason') : undefined,
+  };
+  const showOfflineApproval =
+    lineNeedsApproval(previewLine) &&
+    (hasResolutionRecorded(previewLine) || !!line.offlineApproval);
 
   const handleSave = async () => {
     try {
@@ -217,14 +244,13 @@ export default function EditLineDrawer({
         resolveLineMode(line, values.toBringQty ?? line.toBringQty) === 'shortfall'
           ? actionTypes.map((type) => {
               const existing = line.shortfallActions.find((a) => a.type === type);
-              const approved = existing?.approved ?? false;
 
               if (type === 'accept') {
                 return {
                   type: 'accept',
                   qty: values.acceptQty ?? 1,
                   remarks: values.acceptRemarks ?? '',
-                  approved,
+                  approved: existing?.approved ?? false,
                   targetNsn: shortfallTargetNsn,
                 };
               }
@@ -234,7 +260,7 @@ export default function EditLineDrawer({
                   qty: values.waitQty ?? 1,
                   repairComponentRef: values.waitRef,
                   needByDate: planNeedByDate,
-                  approved,
+                  approved: existing?.approved ?? false,
                   targetNsn: shortfallTargetNsn,
                 };
               }
@@ -244,18 +270,13 @@ export default function EditLineDrawer({
                 tailNumber: values.cannTail ?? '',
                 workCentreComments: values.cannComments ?? '',
                 confirmedWithWorkCentre: true,
-                approved,
+                approved: existing?.approved ?? false,
                 targetNsn: shortfallTargetNsn,
               };
             })
           : [];
 
       const mode = resolveLineMode(line, values.toBringQty ?? line.toBringQty);
-
-      if (mode === 'shortfall' && actionTypes.length === 0) {
-        message.error('Select at least one resolution action');
-        return;
-      }
 
       const nextToBringQty =
         mode === 'shortfall'
@@ -277,16 +298,34 @@ export default function EditLineDrawer({
         toBringQty: nextToBringQty,
         shortfallTargetNsn: shortfallTargetNsn ?? line.shortfallTargetNsn,
         shortfallActions,
+        deviationApproved: undefined,
       };
 
       if (mode === 'deviation') {
         updated.deviationReason = values.deviationReason;
         updated.deviationRemarks = undefined;
-        updated.deviationApproved = line.deviationApproved ?? false;
       } else {
         updated.deviationReason = undefined;
         updated.deviationRemarks = undefined;
-        updated.deviationApproved = undefined;
+      }
+
+      const draftForApproval: PlanLine = { ...updated };
+      if (lineNeedsApproval(draftForApproval) && hasResolutionRecorded(draftForApproval)) {
+        const approverName = (values.approverName as string | undefined)?.trim();
+        const approvedDate = values.approvedDate
+          ? (values.approvedDate as dayjs.Dayjs).format('YYYY-MM-DD')
+          : undefined;
+
+        if (approverName && approvedDate) {
+          updated.offlineApproval = { approverName, approvedDate };
+        } else if (approverName || approvedDate) {
+          message.error('Complete both approving officer and date of approval, or leave them blank');
+          return;
+        } else {
+          updated.offlineApproval = undefined;
+        }
+      } else {
+        updated.offlineApproval = undefined;
       }
 
       onSave(updated);
@@ -319,66 +358,66 @@ export default function EditLineDrawer({
         NSN: {line.nsn}
       </Typography.Text>
 
+      <Tag
+        color={STATUS_TAG_COLORS[lineStatus]}
+        className="edit-line-status-tag"
+      >
+        {formatLineStatus(lineStatus)}
+      </Tag>
+
       <Form form={form} layout="vertical">
-        <div className="edit-line-qty-panel">
-          <Typography.Text strong className="edit-line-qty-panel-title">
-            To-bring qty
+        <div className="edit-line-qty-row-section">
+          <Typography.Text type="secondary" className="edit-line-qty-row-label">
+            Qty update
           </Typography.Text>
-          <Typography.Text type="secondary" className="edit-line-qty-panel-subtitle">
-            {lineMode === 'shortfall'
-              ? 'Matches required qty when stock is sufficient; otherwise available plus wait/cannibalise resolution qty.'
-              : 'Use required and available below as reference when setting to-bring.'}
-          </Typography.Text>
-
-          <div className="edit-line-qty-reference">
-            <QtyReferenceStat label="Required" value={line.requiredQty} />
-            <QtyReferenceStat
-              label="Available"
-              value={groupAvailable}
-              tone={groupAvailable < line.requiredQty ? 'warning' : 'success'}
-            />
+          <div className="edit-line-qty-row">
+            <div className="edit-line-qty-cell">
+              <Typography.Text className="edit-line-qty-cell-label">Required</Typography.Text>
+              <Typography.Text className="edit-line-qty-cell-value">{line.requiredQty}</Typography.Text>
+            </div>
+            <div
+              className={`edit-line-qty-cell${
+                groupAvailable < line.requiredQty ? ' edit-line-qty-cell--warning' : ''
+              }`}
+            >
+              <Typography.Text className="edit-line-qty-cell-label">Available</Typography.Text>
+              <Typography.Text className="edit-line-qty-cell-value">{groupAvailable}</Typography.Text>
+            </div>
+            <div className="edit-line-qty-cell edit-line-qty-cell--input">
+              <Typography.Text className="edit-line-qty-cell-label">To-bring</Typography.Text>
+              <Form.Item
+                name="toBringQty"
+                rules={[
+                  { required: true, message: 'Enter to-bring quantity' },
+                  ...(lineMode !== 'shortfall'
+                    ? [
+                        {
+                          validator: (_: unknown, value: number | null) => {
+                            if (value == null || value <= groupAvailable) {
+                              return Promise.resolve();
+                            }
+                            return Promise.reject(
+                              new Error(
+                                `To-bring cannot exceed available qty (${groupAvailable})`,
+                              ),
+                            );
+                          },
+                        },
+                      ]
+                    : []),
+                ]}
+                style={{ marginBottom: 0 }}
+              >
+                <InputNumber
+                  min={lineMode === 'deviation' ? line.requiredQty + 1 : 0}
+                  max={lineMode !== 'shortfall' ? groupAvailable : undefined}
+                  readOnly={toBringReadOnly}
+                  disabled={toBringReadOnly}
+                  className="edit-line-qty-cell-input"
+                />
+              </Form.Item>
+            </div>
           </div>
-
-          <Form.Item
-            name="toBringQty"
-            label="To-bring"
-            rules={[
-              { required: true, message: 'Enter to-bring quantity' },
-              ...(lineMode === 'shortfall'
-                ? []
-                : [
-                    {
-                      validator: (_: unknown, value: number | null) => {
-                        if (value == null || value <= groupAvailable) {
-                          return Promise.resolve();
-                        }
-                        return Promise.reject(
-                          new Error(`To-bring cannot exceed available qty (${groupAvailable})`),
-                        );
-                      },
-                    },
-                  ]),
-            ]}
-            className="edit-line-to-bring-field"
-          >
-            <InputNumber
-              className="edit-line-to-bring"
-              min={0}
-              max={lineMode === 'shortfall' ? undefined : groupAvailable}
-              readOnly={lineMode === 'shortfall'}
-              disabled={lineMode === 'shortfall'}
-              style={{ width: '100%', height: 48 }}
-            />
-          </Form.Item>
-        </div>
-
-        <div className="edit-line-type-section">
-          <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
-            Line type
-          </Typography.Text>
-          <Tag color={STATUS_TAG_COLORS[lineStatus]} style={{ fontSize: 13, padding: '2px 10px' }}>
-            {formatLineStatus(lineStatus)}
-          </Tag>
         </div>
 
         {lineMode === 'deviation' && (
@@ -393,19 +432,28 @@ export default function EditLineDrawer({
 
         {lineMode === 'shortfall' && (
           <div className="shortfall-resolution-panel">
-            <Typography.Text strong style={{ fontSize: 15, display: 'block' }}>
-              Resolution actions required
+            <Typography.Text strong className="shortfall-resolution-title">
+              Choose a resolution path
             </Typography.Text>
-            <Typography.Text type="secondary" style={{ display: 'block', margin: '4px 0 16px' }}>
-              Select one or more actions below and specify the shortfall qty for each. Total
-              shortfall: <Typography.Text strong>{shortfallQty}</Typography.Text>
+            <Typography.Text type="secondary" className="shortfall-resolution-subtitle">
+              Select one or more paths when ready, or save unresolved if undecided. Total shortfall:{' '}
+              <Typography.Text strong>{shortfallQty}</Typography.Text>
             </Typography.Text>
 
             {isGroup && (
               <Form.Item
                 name="shortfallTargetNsn"
                 label="Top up which NSN?"
-                rules={[{ required: true, message: 'Select NSN to top up' }]}
+                dependencies={['shortfallActionTypes']}
+                rules={[
+                  ({ getFieldValue }) => ({
+                    validator: (_, value) => {
+                      const types = getFieldValue('shortfallActionTypes') ?? [];
+                      if (types.length === 0 || value) return Promise.resolve();
+                      return Promise.reject(new Error('Select NSN to top up'));
+                    },
+                  }),
+                ]}
               >
                 <Select
                   options={line.interchangeableMembers!.map((member) => ({
@@ -416,10 +464,7 @@ export default function EditLineDrawer({
               </Form.Item>
             )}
 
-            <Form.Item
-              name="shortfallActionTypes"
-              rules={[{ required: true, message: 'Select at least one resolution action' }]}
-            >
+            <Form.Item name="shortfallActionTypes">
               <Checkbox.Group className="shortfall-action-checkboxes">
                 <Space direction="vertical" size={8} style={{ width: '100%' }}>
                   <div
@@ -451,7 +496,12 @@ export default function EditLineDrawer({
                     }`}
                   >
                     <div className="shortfall-action-row">
-                      <Checkbox value="wait">Wait (expedite repair/new buys)</Checkbox>
+                      <div className="shortfall-action-row-main">
+                        <Checkbox value="wait">Wait</Checkbox>
+                        <Typography.Text type="secondary" className="shortfall-action-description">
+                          Expedite repair/new buys
+                        </Typography.Text>
+                      </div>
                       <ShortfallActionQtyField
                         actionType="wait"
                         fieldName="waitQty"
@@ -521,9 +571,45 @@ export default function EditLineDrawer({
           </div>
         )}
 
-        {lineMode === null && (
+        {lineMode === null && showDeviationHint && (
+          <div className="deviation-available-panel">
+            <Typography.Text strong className="deviation-available-panel-title">
+              Record a deviation
+            </Typography.Text>
+            <Typography.Text type="secondary">
+              Available stock ({groupAvailable}) exceeds the L-series requirement ({line.requiredQty}
+              ). Increase to-bring above {line.requiredQty} and provide a reason — the line will
+              appear in the approval pack for offline sign-off.
+            </Typography.Text>
+          </div>
+        )}
+
+        {showOfflineApproval && (
+          <div className="edit-line-offline-approval">
+            <Typography.Text strong className="edit-line-offline-approval-title">
+              Offline approval
+            </Typography.Text>
+            <Typography.Text type="secondary" className="edit-line-offline-approval-subtitle">
+              Record approval details once resolution is complete.
+            </Typography.Text>
+            <div className="edit-line-offline-approval-row">
+              <Form.Item
+                name="approverName"
+                label="Approving Officer"
+                rules={[{ required: false }]}
+              >
+                <Input placeholder="e.g. LTC Tan Wei Ming" />
+              </Form.Item>
+              <Form.Item name="approvedDate" label="Date of Approval">
+                <DatePicker style={{ width: '100%' }} format="DD MMM YYYY" />
+              </Form.Item>
+            </div>
+          </div>
+        )}
+
+        {lineMode === null && !showDeviationHint && (
           <Typography.Text type="secondary">
-            No deviation or shortfall actions required for this line.
+            This line is fulfilled — no further action required.
           </Typography.Text>
         )}
       </Form>

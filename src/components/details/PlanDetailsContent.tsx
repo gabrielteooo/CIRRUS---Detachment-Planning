@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Button, Modal, Space, Tag, Typography, message } from 'antd';
+import { Button, Modal, Space, Tabs, Tag, Typography, message } from 'antd';
 import { EditOutlined, FileTextOutlined } from '@ant-design/icons';
 import { useApp } from '../../context/AppContext';
 import type { Detachment, PlatformPlan } from '../../types/detachment';
@@ -12,12 +12,14 @@ import {
 import type { PlanLine } from '../../types/planLine';
 import type { NsnCatalogEntry } from '../../data/nsnCatalog';
 import { createAddedPlanLines } from '../../utils/addedPlanLines';
+import { countApprovalPackLines, countWorkQueueLines } from '../../types/planLine';
 import KpiStrip from './KpiStrip';
-import ShortfallSummary from './ShortfallSummary';
-import DeviationSummary from './DeviationSummary';
+import WorkQueueTab from './WorkQueueTab';
+import ApprovalPackTab from './ApprovalPackTab';
 import LSeriesTable from './LSeriesTable';
 import AddNsnDrawer from './AddNsnDrawer';
 import InventoryDrawer from './InventoryDrawer';
+import NsnDrilldownModal from './NsnDrilldownModal';
 import EditLineDrawer from './EditLineDrawer';
 import RemarksModal from './RemarksModal';
 
@@ -26,6 +28,8 @@ const STATUS_COLORS: Record<string, string> = {
   'Partially Approved': 'processing',
   Approved: 'success',
 };
+
+type PlanTabKey = 'work-queue' | 'all-components' | 'approval-pack';
 
 interface PlanDetailsContentProps {
   plan: PlatformPlan;
@@ -42,7 +46,9 @@ export default function PlanDetailsContent({
   const planId = plan.id;
   const lines = getPlanLines(planId);
 
+  const [activeTab, setActiveTab] = useState<PlanTabKey>('work-queue');
   const [inventoryLine, setInventoryLine] = useState<PlanLine | null>(null);
+  const [nsnDrilldownLine, setNsnDrilldownLine] = useState<PlanLine | null>(null);
   const [editLine, setEditLine] = useState<PlanLine | null>(null);
   const [remarksOpen, setRemarksOpen] = useState(false);
   const [editParamsOpen, setEditParamsOpen] = useState(false);
@@ -50,6 +56,16 @@ export default function PlanDetailsContent({
 
   const existingNsns = useMemo(() => lines.map((line) => line.nsn), [lines]);
   const variantLabel = formatVariantLabels(plan);
+  const workQueueCount = countWorkQueueLines(lines);
+  const approvalPackCount = countApprovalPackLines(lines);
+
+  const openEditLine = (line: PlanLine) => {
+    setEditLine(line);
+  };
+
+  const closeEditLine = () => {
+    setEditLine(null);
+  };
 
   const handleSaveLine = (updated: PlanLine) => {
     const next = lines.map((l) => (l.id === updated.id ? updated : l));
@@ -57,28 +73,11 @@ export default function PlanDetailsContent({
     message.success('Line updated');
   };
 
-  const handleShortfallApproval = (lineId: string, approved: boolean) => {
-    const next = lines.map((l) => {
-      if (l.id !== lineId) return l;
-      return {
-        ...l,
-        shortfallActions: l.shortfallActions.map((a) => ({ ...a, approved })),
-      };
-    });
-    updatePlanLines(planId, next);
-  };
-
-  const handleDeviationApproval = (lineId: string, approved: boolean) => {
-    const next = lines.map((l) =>
-      l.id === lineId ? { ...l, deviationApproved: approved } : l,
-    );
-    updatePlanLines(planId, next);
-  };
-
   const handleAddNsns = (entries: NsnCatalogEntry[], deviationReason: string) => {
     const newLines = createAddedPlanLines(planId, entries, deviationReason).reverse();
     updatePlanLines(planId, [...newLines, ...lines]);
-    message.success(`${entries.length} NSN${entries.length > 1 ? 's' : ''} added — pending approval`);
+    message.success(`${entries.length} NSN${entries.length > 1 ? 's' : ''} added`);
+    setActiveTab('work-queue');
   };
 
   const handleDeleteLine = (line: PlanLine) => {
@@ -88,6 +87,56 @@ export default function PlanDetailsContent({
     );
     message.success('NSN removed');
   };
+
+  const tabItems = [
+    {
+      key: 'work-queue',
+      label: `Work queue${workQueueCount > 0 ? ` (${workQueueCount})` : ''}`,
+      children: (
+        <WorkQueueTab
+          lines={lines}
+          platform={plan.platform}
+          variant={variantLabel}
+          viewOnly={viewOnly}
+          onEditLine={openEditLine}
+          onViewInventory={setInventoryLine}
+          onViewNsn={setNsnDrilldownLine}
+        />
+      ),
+    },
+    {
+      key: 'all-components',
+      label: 'All components',
+      children: (
+        <LSeriesTable
+          lines={lines}
+          platform={plan.platform}
+          variant={variantLabel}
+          viewOnly={viewOnly}
+          onEditLine={openEditLine}
+          onViewInventory={setInventoryLine}
+          onViewNsn={setNsnDrilldownLine}
+          onAddNsn={() => setAddNsnOpen(true)}
+          onDeleteLine={handleDeleteLine}
+        />
+      ),
+    },
+    {
+      key: 'approval-pack',
+      label: `Approval pack${approvalPackCount > 0 ? ` (${approvalPackCount})` : ''}`,
+      children: (
+        <ApprovalPackTab
+          lines={lines}
+          platform={plan.platform}
+          variant={variantLabel}
+          viewOnly={viewOnly}
+          onEditLine={openEditLine}
+          onViewInventory={setInventoryLine}
+          onViewNsn={setNsnDrilldownLine}
+        />
+      ),
+    },
+  ];
 
   return (
     <div>
@@ -153,39 +202,8 @@ export default function PlanDetailsContent({
           <KpiStrip lines={lines} />
         </section>
 
-        <section className="plan-details-summaries">
-          <ShortfallSummary
-            lines={lines}
-            platform={plan.platform}
-            variant={variantLabel}
-            viewOnly={viewOnly}
-            onEditLine={setEditLine}
-            onToggleApproval={handleShortfallApproval}
-            onViewInventory={setInventoryLine}
-          />
-
-          <DeviationSummary
-            lines={lines}
-            platform={plan.platform}
-            variant={variantLabel}
-            viewOnly={viewOnly}
-            onEditLine={setEditLine}
-            onToggleApproval={handleDeviationApproval}
-            onViewInventory={setInventoryLine}
-          />
-        </section>
-
-        <section className="plan-details-lseries">
-          <LSeriesTable
-            lines={lines}
-            platform={plan.platform}
-            variant={variantLabel}
-            viewOnly={viewOnly}
-            onEditLine={setEditLine}
-            onViewInventory={setInventoryLine}
-            onAddNsn={() => setAddNsnOpen(true)}
-            onDeleteLine={handleDeleteLine}
-          />
+        <section className="plan-details-tabs">
+          <Tabs activeKey={activeTab} onChange={(key) => setActiveTab(key as PlanTabKey)} items={tabItems} />
         </section>
       </div>
 
@@ -195,10 +213,16 @@ export default function PlanDetailsContent({
         onClose={() => setInventoryLine(null)}
       />
 
+      <NsnDrilldownModal
+        line={nsnDrilldownLine}
+        open={!!nsnDrilldownLine}
+        onClose={() => setNsnDrilldownLine(null)}
+      />
+
       <EditLineDrawer
         line={editLine}
         open={!!editLine}
-        onClose={() => setEditLine(null)}
+        onClose={closeEditLine}
         onSave={handleSaveLine}
         planNeedByDate={plan.needByDate}
       />

@@ -16,6 +16,15 @@ export const DESCRIPTION_COLUMN_WIDTH = 260;
 export const PLATFORM_VARIANT_COLUMN_WIDTH = 120;
 export const QTY_COLUMN_WIDTH = 88;
 
+/** 7th column width shared by shortfall (Shortfall) and deviation (To-bring) summary tables. */
+export const SUMMARY_SEVENTH_COLUMN_WIDTH = 100;
+
+export const ACTION_COLUMN_WIDTH = 160;
+export const SUMMARY_EDIT_COLUMN_WIDTH = 70;
+export const STATUS_COLUMN_WIDTH = 110;
+/** Min width for Resolution / Reason columns in summary tables (included in scroll.x). */
+export const FLEX_TEXT_COLUMN_MIN_WIDTH = 160;
+
 export function PlatformVariantTags({
   platform,
   variant,
@@ -50,9 +59,29 @@ export function getPlatformVariantColumn<T extends PlanLine>(
   };
 }
 
-export function getNsnMpnDescriptionColumns<T extends NsnRow>(): ColumnType<T>[] {
+export function getNsnMpnDescriptionColumns<T extends NsnRow>(
+  onViewNsn?: (record: T) => void,
+): ColumnType<T>[] {
   return [
-    { title: 'NSN', dataIndex: 'nsn', width: NSN_COLUMN_WIDTH, ellipsis: true },
+    {
+      title: 'NSN',
+      dataIndex: 'nsn',
+      width: NSN_COLUMN_WIDTH,
+      ellipsis: true,
+      render: onViewNsn
+        ? (nsn: string, record: T) => (
+            <Button
+              type="link"
+              size="small"
+              className="nsn-link"
+              style={{ padding: 0 }}
+              onClick={() => onViewNsn(record)}
+            >
+              {nsn}
+            </Button>
+          )
+        : undefined,
+    },
     {
       title: 'MPN',
       key: 'mpn',
@@ -100,8 +129,33 @@ export function getAvailableColumn<T extends PlanLine>(
   };
 }
 
-export function getToBringColumn<T extends PlanLine>(): ColumnType<T> {
-  return { title: 'To-bring', dataIndex: 'toBringQty', width: QTY_COLUMN_WIDTH };
+export function getToBringColumn<T extends PlanLine>(
+  width: number = QTY_COLUMN_WIDTH,
+): ColumnType<T> {
+  return { title: 'To-bring', dataIndex: 'toBringQty', width };
+}
+
+export function getSummaryToBringColumn<T extends PlanLine>(): ColumnType<T> {
+  return getToBringColumn(SUMMARY_SEVENTH_COLUMN_WIDTH);
+}
+
+export function getSummaryEditColumn<T extends PlanLine>(
+  viewOnly: boolean,
+  onEditLine: (line: T) => void,
+  label = 'Deviate',
+): ColumnType<T> {
+  return {
+    title: '',
+    key: 'edit',
+    width: SUMMARY_EDIT_COLUMN_WIDTH,
+    fixed: 'right' as const,
+    render: (_: unknown, record: T) =>
+      !viewOnly ? (
+        <Button type="link" size="small" onClick={() => onEditLine(record)}>
+          {label}
+        </Button>
+      ) : null,
+  };
 }
 
 export const DETACHMENT_TABLE_LAYOUT = 'fixed' as const;
@@ -119,18 +173,41 @@ export const DETACHMENT_TABLE_SCROLL_X = computeDetachmentTableScrollX([
   QTY_COLUMN_WIDTH,
   QTY_COLUMN_WIDTH,
   QTY_COLUMN_WIDTH,
-  110,
-  80,
+  STATUS_COLUMN_WIDTH,
+  ACTION_COLUMN_WIDTH,
 ]);
 
-/** Deviation summary: Platform/Variant, Required, Available, To-bring, Delta, Reason, Offline approval, Edit */
-export const DEVIATION_SUMMARY_SCROLL_X = computeDetachmentTableScrollX([
+/** Work queue: Platform/Variant, Required, Available, Shortfall, Edit */
+export const WORK_QUEUE_SCROLL_X = computeDetachmentTableScrollX([
   PLATFORM_VARIANT_COLUMN_WIDTH,
   QTY_COLUMN_WIDTH,
   QTY_COLUMN_WIDTH,
-  QTY_COLUMN_WIDTH,
-  70,
-  220,
-  160,
-  70,
+  SUMMARY_SEVENTH_COLUMN_WIDTH,
+  SUMMARY_EDIT_COLUMN_WIDTH,
 ]);
+
+/** Approval pack shortfall: Platform/Variant, Required, Available, Shortfall, Resolution, Edit */
+export const APPROVAL_PACK_SHORTFALL_SCROLL_X = computeDetachmentTableScrollX([
+  PLATFORM_VARIANT_COLUMN_WIDTH,
+  QTY_COLUMN_WIDTH,
+  QTY_COLUMN_WIDTH,
+  SUMMARY_SEVENTH_COLUMN_WIDTH,
+  FLEX_TEXT_COLUMN_MIN_WIDTH,
+  SUMMARY_EDIT_COLUMN_WIDTH,
+]);
+
+/** Approval pack deviation: Platform/Variant, Required, To-bring, Delta, Reason, Edit */
+export const APPROVAL_PACK_DEVIATION_SCROLL_X = computeDetachmentTableScrollX([
+  PLATFORM_VARIANT_COLUMN_WIDTH,
+  QTY_COLUMN_WIDTH,
+  SUMMARY_SEVENTH_COLUMN_WIDTH,
+  80,
+  FLEX_TEXT_COLUMN_MIN_WIDTH,
+  SUMMARY_EDIT_COLUMN_WIDTH,
+]);
+
+/** @deprecated Use APPROVAL_PACK_DEVIATION_SCROLL_X */
+export const DEVIATION_SUMMARY_SCROLL_X = APPROVAL_PACK_DEVIATION_SCROLL_X;
+
+/** @deprecated Use APPROVAL_PACK_SHORTFALL_SCROLL_X */
+export const SHORTFALL_SUMMARY_SCROLL_X = APPROVAL_PACK_SHORTFALL_SCROLL_X;
