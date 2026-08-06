@@ -23,7 +23,7 @@ const PLANNER_PLATFORM_OPTIONS = [
 ];
 
 export default function PlanListPage() {
-  const { role, setRole, plans, plannerPlatform, setPlannerPlatform } = useApp();
+  const { role, setRole, plans, plannerPlatform, setPlannerPlatform, getPlanLines } = useApp();
   const visibleDetachments = useVisibleDetachments();
   const [tab, setTab] = useState<'open' | 'past'>('open');
   const [directorPlatformFilter, setDirectorPlatformFilter] = useState<string>('all');
@@ -80,7 +80,7 @@ export default function PlanListPage() {
       result = result.filter((d) => {
         const detachmentPlans = plans.filter((p) => p.detachmentId === d.id);
         if (isDirector) {
-          return aggregateDetachmentStatus(detachmentPlans) === statusFilter;
+          return aggregateDetachmentStatus(detachmentPlans, getPlanLines) === statusFilter;
         }
         const platformPlan = detachmentPlans.find((p) => p.platform === plannerPlatform);
         return platformPlan?.status === statusFilter;
@@ -115,6 +115,7 @@ export default function PlanListPage() {
     search,
     isDirector,
     plannerPlatform,
+    getPlanLines,
   ]);
 
   const cardPlans = useMemo(() => {
@@ -177,7 +178,7 @@ export default function PlanListPage() {
 
         <Space>
           {showCreatePlan && (
-            <Button icon={<PlusOutlined />} onClick={() => setCreatePlanOpen(true)}>
+            <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreatePlanOpen(true)}>
               Create Plan
             </Button>
           )}

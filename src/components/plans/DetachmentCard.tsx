@@ -1,5 +1,6 @@
 import { Card, Col, Row, Tag, Typography, Space } from 'antd';
 import { useNavigate } from 'react-router-dom';
+import { useApp } from '../../context/AppContext';
 import type { Detachment, PlatformPlan } from '../../types/detachment';
 import {
   aggregateDeviations,
@@ -28,11 +29,12 @@ export default function DetachmentCard({
   showCreator,
 }: DetachmentCardProps) {
   const navigate = useNavigate();
+  const { getPlanLines } = useApp();
   const isPast = isPastDetachment(detachment);
-  const status = aggregateDetachmentStatus(plans);
-  const fillRate = aggregateFillRate(plans);
-  const shortfalls = aggregateShortfalls(plans);
-  const deviations = aggregateDeviations(plans);
+  const status = aggregateDetachmentStatus(plans, getPlanLines);
+  const fillRate = aggregateFillRate(plans, getPlanLines);
+  const shortfalls = aggregateShortfalls(plans, getPlanLines);
+  const deviations = aggregateDeviations(plans, getPlanLines);
   const platforms = [...new Set(plans.map((p) => p.platform))];
 
   return (

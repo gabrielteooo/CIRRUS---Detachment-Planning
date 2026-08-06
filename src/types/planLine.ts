@@ -111,6 +111,11 @@ export function getShortfallQty(line: PlanLine): number {
   return Math.max(0, line.requiredQty - getGroupAvailableQty(line));
 }
 
+/** Available minus required; negative when stock is short. */
+export function getShortfallDelta(line: PlanLine): number {
+  return getGroupAvailableQty(line) - line.requiredQty;
+}
+
 /** True when stock exceeds L-series requirement and user may bring extra qty (deviation). */
 export function canDeviateQty(line: PlanLine): boolean {
   return (
@@ -272,6 +277,14 @@ export function hasResolutionRecorded(line: PlanLine): boolean {
   return false;
 }
 
+export function getLineActionLabel(line: PlanLine): 'Resolve' | 'Edit' | 'Deviate' {
+  const status = getLineStatus(line);
+  if (status === 'Shortfall') {
+    return hasResolutionRecorded(line) ? 'Edit' : 'Resolve';
+  }
+  return 'Deviate';
+}
+
 export function lineNeedsApproval(line: PlanLine): boolean {
   const status = getLineStatus(line);
   if (status === 'Shortfall') return line.shortfallActions.length > 0;
@@ -280,6 +293,19 @@ export function lineNeedsApproval(line: PlanLine): boolean {
     return line.toBringQty > line.requiredQty;
   }
   return false;
+}
+
+/** Line has resolution recorded and belongs in the approval pack (not work queue). */
+export function isInApprovalPack(line: PlanLine): boolean {
+  return (
+    lineNeedsApproval(line) &&
+    hasResolutionRecorded(line) &&
+    !isShortfallUnresolved(line)
+  );
+}
+
+export function wasNewlyMovedToApprovalPack(before: PlanLine, after: PlanLine): boolean {
+  return !isInApprovalPack(before) && isInApprovalPack(after);
 }
 
 export function isLineApprovalComplete(line: PlanLine): boolean {
@@ -348,7 +374,7 @@ export function getWorkQueueLines(lines: PlanLine[]): PlanLine[] {
 /** Shortfalls and deviations with resolution recorded (pending or approved). */
 export function getApprovalPackLines(
   lines: PlanLine[],
-  filter: 'pending' | 'approved' = 'pending',
+  filter: 'pending' | 'approved' | 'all' = 'pending',
 ): {
   shortfalls: PlanLine[];
   deviations: PlanLine[];
@@ -361,19 +387,53 @@ export function getApprovalPackLines(
   );
 
   const filtered =
-    filter === 'pending'
-      ? withResolution.filter((l) => getLineApprovalStatus(l) === 'unapproved')
-      : withResolution.filter((l) => getLineApprovalStatus(l) === 'approved');
+    filter === 'all'
+      ? withResolution
+      : filter === 'pending'
+        ? withResolution.filter((l) => getLineApprovalStatus(l) === 'unapproved')
+        : withResolution.filter((l) => getLineApprovalStatus(l) === 'approved');
+
+  const sortUnapprovedFirst = (items: PlanLine[]) =>
+    [...items].sort((a, b) => {
+      const aApproved = isLineApprovalComplete(a) ? 1 : 0;
+      const bApproved = isLineApprovalComplete(b) ? 1 : 0;
+      return aApproved - bApproved;
+    });
 
   return {
-    shortfalls: filtered.filter((l) => getLineStatus(l) === 'Shortfall'),
-    deviations: filtered.filter((l) => getLineStatus(l) === 'Deviation'),
+    shortfalls: sortUnapprovedFirst(
+      filtered.filter((l) => getLineStatus(l) === 'Shortfall'),
+    ),
+    deviations: sortUnapprovedFirst(
+      filtered.filter((l) => getLineStatus(l) === 'Deviation'),
+    ),
+  };
+}
+
+export function applyOfflineApproval(
+  line: PlanLine,
+  approval: OfflineApprovalRecord,
+): PlanLine {
+  return {
+    ...line,
+    offlineApproval: approval,
+    deviationApproved: getLineStatus(line) === 'Deviation' ? true : line.deviationApproved,
+    shortfallActions: line.shortfallActions.map((action) => ({ ...action, approved: true })),
+  };
+}
+
+export function clearOfflineApproval(line: PlanLine): PlanLine {
+  return {
+    ...line,
+    offlineApproval: undefined,
+    deviationApproved: undefined,
+    shortfallActions: line.shortfallActions.map((action) => ({ ...action, approved: false })),
   };
 }
 
 export function countApprovalPackLines(lines: PlanLine[]): number {
-  return getApprovalPackLines(lines, 'pending').shortfalls.length +
-    getApprovalPackLines(lines, 'pending').deviations.length;
+  const { shortfalls, deviations } = getApprovalPackLines(lines, 'all');
+  return shortfalls.length + deviations.length;
 }
 
 export function countApprovedPackLines(lines: PlanLine[]): number {

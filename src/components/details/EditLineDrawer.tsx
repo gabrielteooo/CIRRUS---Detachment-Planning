@@ -9,10 +9,8 @@ import {
   Typography,
   Button,
   Space,
-  DatePicker,
   message,
 } from 'antd';
-import dayjs from 'dayjs';
 import { useEffect, type ReactNode } from 'react';
 import type {
   LineStatus,
@@ -27,9 +25,7 @@ import {
   getGroupAvailableQty,
   getPrimaryMemberNsn,
   getShortfallQty,
-  hasResolutionRecorded,
   isInterchangeableLine,
-  lineNeedsApproval,
 } from '../../types/planLine';
 import { formatDate } from '../../utils/planUtils';
 
@@ -152,10 +148,6 @@ export default function EditLineDrawer({
         cannQty: cannAction?.qty ?? defaultQty,
         cannTail: cannAction?.type === 'cannibalise' ? cannAction.tailNumber : '',
         cannComments: cannAction?.type === 'cannibalise' ? cannAction.workCentreComments : '',
-        approverName: line.offlineApproval?.approverName ?? '',
-        approvedDate: line.offlineApproval?.approvedDate
-          ? dayjs(line.offlineApproval.approvedDate)
-          : undefined,
       });
     }
   }, [line, open, form]);
@@ -201,38 +193,19 @@ export default function EditLineDrawer({
   const selectedActions = shortfallActionTypes ?? [];
   const toBringReadOnly = lineMode === 'shortfall';
   const showDeviationHint = lineMode === null && canDeviateQty(line);
-
-  const previewLine: PlanLine = {
-    ...line,
-    toBringQty: currentToBringResolved,
-    shortfallActions:
-      lineMode === 'shortfall'
-        ? selectedActions.map((type) => {
-            if (type === 'accept') return { type, qty: acceptQty ?? 1, remarks: '', approved: false };
-            if (type === 'wait') {
-              return {
-                type,
-                qty: waitQty ?? 1,
-                repairComponentRef: '',
-                needByDate: planNeedByDate,
-                approved: false,
-              };
-            }
-            return {
-              type: 'cannibalise',
-              qty: cannQty ?? 1,
-              tailNumber: '',
-              workCentreComments: '',
-              confirmedWithWorkCentre: true,
-              approved: false,
-            };
-          })
-        : line.shortfallActions,
-    deviationReason: lineMode === 'deviation' ? form.getFieldValue('deviationReason') : undefined,
-  };
-  const showOfflineApproval =
-    lineNeedsApproval(previewLine) &&
-    (hasResolutionRecorded(previewLine) || !!line.offlineApproval);
+  const revertingDeviation =
+    lineMode === null &&
+    !line.isAddedNsn &&
+    line.toBringQty > line.requiredQty &&
+    currentToBringResolved === line.requiredQty;
+  const toBringMin =
+    lineMode === 'shortfall'
+      ? 0
+      : line.isAddedNsn
+        ? line.requiredQty + 1
+        : lineMode === 'deviation' || line.toBringQty > line.requiredQty
+          ? line.requiredQty
+          : 0;
 
   const handleSave = async () => {
     try {
@@ -307,24 +280,6 @@ export default function EditLineDrawer({
       } else {
         updated.deviationReason = undefined;
         updated.deviationRemarks = undefined;
-      }
-
-      const draftForApproval: PlanLine = { ...updated };
-      if (lineNeedsApproval(draftForApproval) && hasResolutionRecorded(draftForApproval)) {
-        const approverName = (values.approverName as string | undefined)?.trim();
-        const approvedDate = values.approvedDate
-          ? (values.approvedDate as dayjs.Dayjs).format('YYYY-MM-DD')
-          : undefined;
-
-        if (approverName && approvedDate) {
-          updated.offlineApproval = { approverName, approvedDate };
-        } else if (approverName || approvedDate) {
-          message.error('Complete both approving officer and date of approval, or leave them blank');
-          return;
-        } else {
-          updated.offlineApproval = undefined;
-        }
-      } else {
         updated.offlineApproval = undefined;
       }
 
@@ -409,7 +364,7 @@ export default function EditLineDrawer({
                 style={{ marginBottom: 0 }}
               >
                 <InputNumber
-                  min={lineMode === 'deviation' ? line.requiredQty + 1 : 0}
+                  min={toBringMin}
                   max={lineMode !== 'shortfall' ? groupAvailable : undefined}
                   readOnly={toBringReadOnly}
                   disabled={toBringReadOnly}
@@ -428,6 +383,12 @@ export default function EditLineDrawer({
           >
             <Input.TextArea rows={3} placeholder="Describe why to-bring qty exceeds required qty" />
           </Form.Item>
+        )}
+
+        {revertingDeviation && (
+          <Typography.Text type="secondary">
+            To-bring matches the required qty — this line will be marked as fulfilled when saved.
+          </Typography.Text>
         )}
 
         {lineMode === 'shortfall' && (
@@ -581,29 +542,6 @@ export default function EditLineDrawer({
               ). Increase to-bring above {line.requiredQty} and provide a reason — the line will
               appear in the approval pack for offline sign-off.
             </Typography.Text>
-          </div>
-        )}
-
-        {showOfflineApproval && (
-          <div className="edit-line-offline-approval">
-            <Typography.Text strong className="edit-line-offline-approval-title">
-              Offline approval
-            </Typography.Text>
-            <Typography.Text type="secondary" className="edit-line-offline-approval-subtitle">
-              Record approval details once resolution is complete.
-            </Typography.Text>
-            <div className="edit-line-offline-approval-row">
-              <Form.Item
-                name="approverName"
-                label="Approving Officer"
-                rules={[{ required: false }]}
-              >
-                <Input placeholder="e.g. LTC Tan Wei Ming" />
-              </Form.Item>
-              <Form.Item name="approvedDate" label="Date of Approval">
-                <DatePicker style={{ width: '100%' }} format="DD MMM YYYY" />
-              </Form.Item>
-            </div>
           </div>
         )}
 

@@ -1,5 +1,14 @@
 import type { PlatformPlan } from '../types/detachment';
+import type { PlanLine } from '../types/planLine';
+import {
+  computeFillRate,
+  computePlanStatus,
+  countDeviations,
+  countShortfalls,
+} from '../types/planLine';
 import { L_SERIES_TEMPLATE, L_SERIES_VERSION_IDS } from './lSeriesTemplate';
+
+export type GetPlanLines = (planId: string) => PlanLine[];
 
 export const MOCK_PLANS: PlatformPlan[] = [
   {
@@ -367,22 +376,30 @@ export function fillRateColor(percent: number): string {
   return '#cf1322';
 }
 
-export function aggregateDetachmentStatus(plans: PlatformPlan[]): PlatformPlan['status'] {
+export function aggregateDetachmentStatus(
+  plans: PlatformPlan[],
+  getPlanLines?: GetPlanLines,
+): PlatformPlan['status'] {
   if (plans.length === 0) return 'Draft';
-  if (plans.every((p) => p.status === 'Approved')) return 'Approved';
-  if (plans.some((p) => p.status === 'Partially Approved')) return 'Partially Approved';
+  const statuses = getPlanLines
+    ? plans.map((p) => computePlanStatus(getPlanLines(p.id)))
+    : plans.map((p) => p.status);
+  if (statuses.every((s) => s === 'Approved')) return 'Approved';
+  if (statuses.some((s) => s === 'Partially Approved')) return 'Partially Approved';
   return 'Draft';
 }
 
-export function aggregateFillRate(plans: PlatformPlan[]): number {
+export function aggregateFillRate(plans: PlatformPlan[], getPlanLines: GetPlanLines): number {
   if (plans.length === 0) return 0;
-  return Math.round(plans.reduce((sum, p) => sum + p.fillRatePercent, 0) / plans.length);
+  return Math.round(
+    plans.reduce((sum, p) => sum + computeFillRate(getPlanLines(p.id)), 0) / plans.length,
+  );
 }
 
-export function aggregateShortfalls(plans: PlatformPlan[]): number {
-  return plans.reduce((sum, p) => sum + p.shortfallCount, 0);
+export function aggregateShortfalls(plans: PlatformPlan[], getPlanLines: GetPlanLines): number {
+  return plans.reduce((sum, p) => sum + countShortfalls(getPlanLines(p.id)), 0);
 }
 
-export function aggregateDeviations(plans: PlatformPlan[]): number {
-  return plans.reduce((sum, p) => sum + p.deviationCount, 0);
+export function aggregateDeviations(plans: PlatformPlan[], getPlanLines: GetPlanLines): number {
+  return plans.reduce((sum, p) => sum + countDeviations(getPlanLines(p.id)), 0);
 }

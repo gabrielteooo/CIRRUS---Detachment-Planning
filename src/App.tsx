@@ -1,7 +1,7 @@
 import { BrowserRouter, HashRouter, Navigate, Route, Routes } from 'react-router-dom';
 
 const Router = import.meta.env.VITE_HASH_ROUTER ? HashRouter : BrowserRouter;
-import { ConfigProvider } from 'antd';
+import { App as AntApp, ConfigProvider } from 'antd';
 import AppShell from './components/layout/AppShell';
 import PlanListPage from './pages/PlanListPage';
 import DetachmentDetailsPage from './pages/DetachmentDetailsPage';
@@ -45,18 +45,20 @@ const theme = {
 export default function App() {
   return (
     <ConfigProvider theme={theme}>
-      <AppProvider>
-        <Router>
-          <Routes>
-            <Route element={<AppShell />}>
-              <Route path="/" element={<Navigate to="/detachment-planning" replace />} />
-              <Route path="/detachment-planning" element={<PlanListPage />} />
-              <Route path="/detachment-planning/:detachmentId" element={<DetachmentDetailsPage />} />
-              <Route path="/detachment-planning/plan/:planId" element={<PlanDetailsPage />} />
-            </Route>
-          </Routes>
-        </Router>
-      </AppProvider>
+      <AntApp message={{ top: 24, maxCount: 3 }}>
+        <AppProvider>
+          <Router>
+            <Routes>
+              <Route element={<AppShell />}>
+                <Route path="/" element={<Navigate to="/detachment-planning" replace />} />
+                <Route path="/detachment-planning" element={<PlanListPage />} />
+                <Route path="/detachment-planning/:detachmentId" element={<DetachmentDetailsPage />} />
+                <Route path="/detachment-planning/plan/:planId" element={<PlanDetailsPage />} />
+              </Route>
+            </Routes>
+          </Router>
+        </AppProvider>
+      </AntApp>
     </ConfigProvider>
   );
 }

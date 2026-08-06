@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Alert, Button, Empty, Tabs, Typography } from 'antd';
-import { ArrowLeftOutlined, PlusOutlined } from '@ant-design/icons';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { PlusOutlined } from '@ant-design/icons';
+import { useParams, useSearchParams } from 'react-router-dom';
 import { useApp, useIsViewOnly } from '../context/AppContext';
 import type { Platform } from '../types/detachment';
 import PlanDetailsContent from '../components/details/PlanDetailsContent';
@@ -10,7 +10,6 @@ import CreatePlanModal from '../components/plans/CreatePlanModal';
 export default function DetachmentDetailsPage() {
   const { detachmentId } = useParams<{ detachmentId: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
-  const navigate = useNavigate();
   const { role, plannerPlatform, getDetachment, getPlansForDetachment } = useApp();
   const [createPlanOpen, setCreatePlanOpen] = useState(false);
 
@@ -47,10 +46,7 @@ export default function DetachmentDetailsPage() {
   if (!detachment || !detachmentId) {
     return (
       <Typography.Text type="secondary">
-        Detachment not found.{' '}
-        <Button type="link" onClick={() => navigate('/detachment-planning')}>
-          Back to list
-        </Button>
+        Detachment not found.
       </Typography.Text>
     );
   }
@@ -64,30 +60,6 @@ export default function DetachmentDetailsPage() {
 
   return (
     <div>
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: 16,
-        }}
-      >
-        <Button
-          type="text"
-          icon={<ArrowLeftOutlined />}
-          onClick={() => navigate('/detachment-planning')}
-          style={{ paddingLeft: 0 }}
-        >
-          Back to list
-        </Button>
-
-        {canCreatePlan && (
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreatePlanOpen(true)}>
-            Create Plan
-          </Button>
-        )}
-      </div>
-
       {viewOnlyBanner && (
         <Alert message={viewOnlyBanner} type="info" showIcon style={{ marginBottom: 16 }} />
       )}

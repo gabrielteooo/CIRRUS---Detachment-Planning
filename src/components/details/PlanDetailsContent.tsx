@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Button, Modal, Space, Tabs, Tag, Typography, message } from 'antd';
+import { App, Button, Modal, Space, Tabs, Tag, Typography } from 'antd';
 import { EditOutlined, FileTextOutlined } from '@ant-design/icons';
 import { useApp } from '../../context/AppContext';
 import type { Detachment, PlatformPlan } from '../../types/detachment';
@@ -9,10 +9,16 @@ import {
   formatVariantLabels,
   formatVariantRowParameters,
 } from '../../utils/planDisplayUtils';
-import type { PlanLine } from '../../types/planLine';
+import {
+  applyOfflineApproval,
+  clearOfflineApproval,
+  countApprovalPackLines,
+  countWorkQueueLines,
+} from '../../types/planLine';
+import type { OfflineApprovalRecord, PlanLine } from '../../types/planLine';
 import type { NsnCatalogEntry } from '../../data/nsnCatalog';
 import { createAddedPlanLines } from '../../utils/addedPlanLines';
-import { countApprovalPackLines, countWorkQueueLines } from '../../types/planLine';
+import { showAddedNsnToast, showPlanLineSaveToast } from '../../utils/planLineToasts';
 import KpiStrip from './KpiStrip';
 import WorkQueueTab from './WorkQueueTab';
 import ApprovalPackTab from './ApprovalPackTab';
@@ -42,6 +48,7 @@ export default function PlanDetailsContent({
   detachment,
   viewOnly,
 }: PlanDetailsContentProps) {
+  const { message } = App.useApp();
   const { getPlanLines, updatePlanLines, updatePlan } = useApp();
   const planId = plan.id;
   const lines = getPlanLines(planId);
@@ -68,15 +75,16 @@ export default function PlanDetailsContent({
   };
 
   const handleSaveLine = (updated: PlanLine) => {
+    const previous = lines.find((l) => l.id === updated.id);
     const next = lines.map((l) => (l.id === updated.id ? updated : l));
     updatePlanLines(planId, next);
-    message.success('Line updated');
+    showPlanLineSaveToast(message, previous, updated);
   };
 
   const handleAddNsns = (entries: NsnCatalogEntry[], deviationReason: string) => {
     const newLines = createAddedPlanLines(planId, entries, deviationReason).reverse();
     updatePlanLines(planId, [...newLines, ...lines]);
-    message.success(`${entries.length} NSN${entries.length > 1 ? 's' : ''} added`);
+    showAddedNsnToast(message);
     setActiveTab('work-queue');
   };
 
@@ -88,10 +96,18 @@ export default function PlanDetailsContent({
     message.success('NSN removed');
   };
 
+  const handleApproveLine = (lineId: string, approval: OfflineApprovalRecord | null) => {
+    const next = lines.map((line) => {
+      if (line.id !== lineId) return line;
+      return approval ? applyOfflineApproval(line, approval) : clearOfflineApproval(line);
+    });
+    updatePlanLines(planId, next);
+  };
+
   const tabItems = [
     {
       key: 'work-queue',
-      label: `Work queue${workQueueCount > 0 ? ` (${workQueueCount})` : ''}`,
+      label: `Action required${workQueueCount > 0 ? ` (${workQueueCount})` : ''}`,
       children: (
         <WorkQueueTab
           lines={lines}
@@ -133,6 +149,7 @@ export default function PlanDetailsContent({
           onEditLine={openEditLine}
           onViewInventory={setInventoryLine}
           onViewNsn={setNsnDrilldownLine}
+          onApproveLine={handleApproveLine}
         />
       ),
     },

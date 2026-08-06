@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Button, Input, Popconfirm, Select, Space, Table, Tag, Typography } from 'antd';
 import { PlusOutlined, SearchOutlined } from '@ant-design/icons';
 import type { PlanLine } from '../../types/planLine';
-import { formatLineStatus, getLineStatus } from '../../types/planLine';
+import { formatLineStatus, getLineActionLabel, getLineStatus } from '../../types/planLine';
 import type { Platform } from '../../types/detachment';
 import {
   getNsnMpnDescriptionColumns,
@@ -102,8 +102,7 @@ export default function LSeriesTable({
       render: (_: unknown, record: PlanLine) => {
         if (viewOnly) return null;
 
-        const status = getLineStatus(record);
-        const actionLabel = status === 'Shortfall' ? 'Resolve' : 'Deviate';
+        const actionLabel = getLineActionLabel(record);
 
         return (
           <Space size={4} wrap>
@@ -180,12 +179,6 @@ export default function LSeriesTable({
           size="middle"
           tableLayout={DETACHMENT_TABLE_LAYOUT}
           scroll={{ x: DETACHMENT_TABLE_SCROLL_X }}
-          rowClassName={(record) => {
-            const status = getLineStatus(record);
-            if (status === 'Shortfall') return 'row-shortfall';
-            if (status === 'Deviation') return 'row-deviation';
-            return '';
-          }}
         />
       </div>
     </div>

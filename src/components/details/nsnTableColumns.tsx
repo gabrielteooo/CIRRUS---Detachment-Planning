@@ -3,6 +3,7 @@ import { Button, Space, Tag } from 'antd';
 import { getMpnForNsn } from '../../data/lSeriesTemplate';
 import type { Platform } from '../../types/detachment';
 import type { PlanLine } from '../../types/planLine';
+import { getDeviationDelta, getShortfallDelta } from '../../types/planLine';
 
 interface NsnRow {
   nsn: string;
@@ -16,7 +17,7 @@ export const DESCRIPTION_COLUMN_WIDTH = 260;
 export const PLATFORM_VARIANT_COLUMN_WIDTH = 120;
 export const QTY_COLUMN_WIDTH = 88;
 
-/** 7th column width shared by shortfall (Shortfall) and deviation (To-bring) summary tables. */
+/** 7th column width shared by shortfall (Delta) and deviation (To-bring) summary tables. */
 export const SUMMARY_SEVENTH_COLUMN_WIDTH = 100;
 
 export const ACTION_COLUMN_WIDTH = 160;
@@ -139,10 +140,35 @@ export function getSummaryToBringColumn<T extends PlanLine>(): ColumnType<T> {
   return getToBringColumn(SUMMARY_SEVENTH_COLUMN_WIDTH);
 }
 
+export function getSummaryShortfallDeltaColumn<T extends PlanLine>(): ColumnType<T> {
+  return {
+    title: 'Delta',
+    key: 'delta',
+    width: SUMMARY_SEVENTH_COLUMN_WIDTH,
+    onCell: () => ({ className: 'shortfall-delta-cell' }),
+    render: (_: unknown, record: T) => getShortfallDelta(record),
+  };
+}
+
+export function getSummaryDeviationDeltaColumn<T extends PlanLine>(
+  width: number = SUMMARY_SEVENTH_COLUMN_WIDTH,
+): ColumnType<T> {
+  return {
+    title: 'Delta',
+    key: 'delta',
+    width,
+    onCell: () => ({ className: 'deviation-delta-cell' }),
+    render: (_: unknown, record: T) => {
+      const delta = getDeviationDelta(record);
+      return delta >= 0 ? `+${delta}` : delta;
+    },
+  };
+}
+
 export function getSummaryEditColumn<T extends PlanLine>(
   viewOnly: boolean,
   onEditLine: (line: T) => void,
-  label = 'Deviate',
+  label: string | ((line: T) => string) = 'Deviate',
 ): ColumnType<T> {
   return {
     title: '',
@@ -152,7 +178,7 @@ export function getSummaryEditColumn<T extends PlanLine>(
     render: (_: unknown, record: T) =>
       !viewOnly ? (
         <Button type="link" size="small" onClick={() => onEditLine(record)}>
-          {label}
+          {typeof label === 'function' ? label(record) : label}
         </Button>
       ) : null,
   };
@@ -177,7 +203,7 @@ export const DETACHMENT_TABLE_SCROLL_X = computeDetachmentTableScrollX([
   ACTION_COLUMN_WIDTH,
 ]);
 
-/** Work queue: Platform/Variant, Required, Available, Shortfall, Edit */
+/** Work queue: Platform/Variant, Required, Available, Delta, Edit */
 export const WORK_QUEUE_SCROLL_X = computeDetachmentTableScrollX([
   PLATFORM_VARIANT_COLUMN_WIDTH,
   QTY_COLUMN_WIDTH,
@@ -186,7 +212,7 @@ export const WORK_QUEUE_SCROLL_X = computeDetachmentTableScrollX([
   SUMMARY_EDIT_COLUMN_WIDTH,
 ]);
 
-/** Approval pack shortfall: Platform/Variant, Required, Available, Shortfall, Resolution, Edit */
+/** Approval pack shortfall: Platform/Variant, Required, Available, Delta, Resolution, Edit */
 export const APPROVAL_PACK_SHORTFALL_SCROLL_X = computeDetachmentTableScrollX([
   PLATFORM_VARIANT_COLUMN_WIDTH,
   QTY_COLUMN_WIDTH,
@@ -196,11 +222,11 @@ export const APPROVAL_PACK_SHORTFALL_SCROLL_X = computeDetachmentTableScrollX([
   SUMMARY_EDIT_COLUMN_WIDTH,
 ]);
 
-/** Approval pack deviation: Platform/Variant, Required, To-bring, Delta, Reason, Edit */
+/** Approval pack deviation: Platform/Variant, Required, Available, Delta, Reason, Edit */
 export const APPROVAL_PACK_DEVIATION_SCROLL_X = computeDetachmentTableScrollX([
   PLATFORM_VARIANT_COLUMN_WIDTH,
   QTY_COLUMN_WIDTH,
-  SUMMARY_SEVENTH_COLUMN_WIDTH,
+  QTY_COLUMN_WIDTH,
   80,
   FLEX_TEXT_COLUMN_MIN_WIDTH,
   SUMMARY_EDIT_COLUMN_WIDTH,

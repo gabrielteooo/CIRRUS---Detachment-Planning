@@ -3,8 +3,8 @@ import { Badge, Collapse, Table, Typography } from 'antd';
 import type { PlanLine } from '../../types/planLine';
 import {
   formatShortfallActions,
+  getLineActionLabel,
   getLineStatus,
-  getShortfallQty,
   sortShortfallLinesByApproval,
 } from '../../types/planLine';
 import type { Platform } from '../../types/detachment';
@@ -15,9 +15,9 @@ import {
   getAvailableColumn,
   getAvailableColumnLinkRenderer,
   getSummaryEditColumn,
+  getSummaryShortfallDeltaColumn,
   DETACHMENT_TABLE_LAYOUT,
   FLEX_TEXT_COLUMN_MIN_WIDTH,
-  SUMMARY_SEVENTH_COLUMN_WIDTH,
   SHORTFALL_SUMMARY_SCROLL_X,
 } from './nsnTableColumns';
 
@@ -67,11 +67,7 @@ export default function ShortfallSummary({
     getPlatformVariantColumn<PlanLine>(platform, variant),
     getRequiredColumn<PlanLine>(),
     getAvailableColumn<PlanLine>(getAvailableColumnLinkRenderer(onViewInventory)),
-    {
-      title: 'Shortfall',
-      width: SUMMARY_SEVENTH_COLUMN_WIDTH,
-      render: (_: unknown, record: PlanLine) => getShortfallQty(record),
-    },
+    getSummaryShortfallDeltaColumn<PlanLine>(),
     {
       title: 'Resolution',
       key: 'actions',
@@ -79,7 +75,7 @@ export default function ShortfallSummary({
       ellipsis: true,
       render: (_: unknown, record: PlanLine) => formatShortfallActions(record.shortfallActions),
     },
-    getSummaryEditColumn<PlanLine>(viewOnly, onEditLine),
+    getSummaryEditColumn<PlanLine>(viewOnly, onEditLine, getLineActionLabel),
   ];
 
   return (

@@ -1,11 +1,12 @@
-import { Avatar, Breadcrumb, Typography } from 'antd';
-import { BellOutlined, HomeOutlined, QuestionCircleOutlined } from '@ant-design/icons';
-import { Link, useLocation, useParams } from 'react-router-dom';
+import { Avatar, Breadcrumb, Button, Typography } from 'antd';
+import { ArrowLeftOutlined, BellOutlined, HomeOutlined, QuestionCircleOutlined } from '@ant-design/icons';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import { DATA_SYNC_TIMESTAMP } from '../../types/detachment';
 
 export default function PageHeader() {
   const location = useLocation();
+  const navigate = useNavigate();
   const { detachmentId } = useParams();
   const { getDetachment, currentUser } = useApp();
 
@@ -64,9 +65,20 @@ export default function PageHeader() {
           alignItems: 'flex-end',
         }}
       >
-        <Typography.Title level={3} style={{ margin: 0 }}>
-          {pageTitle}
-        </Typography.Title>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          {isDetails && (
+            <Button
+              type="text"
+              icon={<ArrowLeftOutlined />}
+              aria-label="Back to detachment list"
+              onClick={() => navigate('/detachment-planning')}
+              style={{ padding: 0, width: 32, height: 32 }}
+            />
+          )}
+          <Typography.Title level={3} style={{ margin: 0 }}>
+            {pageTitle}
+          </Typography.Title>
+        </div>
         <Typography.Text type="secondary" style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
           Data last retrieved on{' '}
           <Typography.Text strong>{DATA_SYNC_TIMESTAMP}</Typography.Text>

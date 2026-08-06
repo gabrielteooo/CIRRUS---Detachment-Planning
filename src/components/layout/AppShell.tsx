@@ -1,9 +1,10 @@
-import { Layout, Menu, Input, Typography, theme } from 'antd';
+import { Button, Input, Layout, Menu, Typography, theme } from 'antd';
 import {
   HomeOutlined,
   SearchOutlined,
   LogoutOutlined,
   MenuFoldOutlined,
+  MenuUnfoldOutlined,
   AppstoreOutlined,
   SettingOutlined,
 } from '@ant-design/icons';
@@ -12,6 +13,9 @@ import { useState } from 'react';
 import PageHeader from './PageHeader';
 
 const { Sider, Content } = Layout;
+
+const SIDER_WIDTH = 280;
+const SIDER_COLLAPSED_WIDTH = 80;
 
 const CIRRUS_ITEMS = [
   { key: 'inventory-health', label: 'Inventory Health' },
@@ -51,7 +55,11 @@ export default function AppShell() {
       icon: <AppstoreOutlined />,
       label: 'CIRRUS',
       children: cirrusChildren,
-      onTitleClick: () => setCirrusOpen((v) => !v),
+      onTitleClick: () => {
+        if (!collapsed) {
+          setCirrusOpen((v) => !v);
+        }
+      },
     },
     {
       key: 'system-config',
@@ -60,54 +68,49 @@ export default function AppShell() {
     },
   ];
 
+  const footerMenuItems = [
+    { key: 'logout', icon: <LogoutOutlined />, label: 'Log Out' },
+    {
+      key: 'collapse',
+      icon: collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />,
+      label: collapsed ? 'Expand Menu' : 'Collapse Menu',
+      onClick: () => setCollapsed((v) => !v),
+    },
+  ];
+
   return (
     <Layout style={{ minHeight: '100vh' }}>
       <Sider
-        width={280}
-        collapsedWidth={0}
+        width={SIDER_WIDTH}
+        collapsedWidth={SIDER_COLLAPSED_WIDTH}
         collapsed={collapsed}
         trigger={null}
-        style={{
-          background: '#191b1e',
-          position: 'sticky',
-          top: 0,
-          height: '100vh',
-          overflow: 'auto',
-        }}
+        className="app-shell-sider"
       >
-        <div style={{ padding: '24px 20px 0' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, height: 48 }}>
-            <div
-              style={{
-                width: 35,
-                height: 40,
-                background: 'linear-gradient(135deg, #00636a 0%, #00838a 100%)',
-                borderRadius: 4,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                flexShrink: 0,
-              }}
-            >
-              <Typography.Text style={{ color: '#fff', fontWeight: 700, fontSize: 16 }}>F</Typography.Text>
-            </div>
+        <div className={`app-shell-sider-top${collapsed ? ' app-shell-sider-top--collapsed' : ''}`}>
+          <div className={`app-shell-logo${collapsed ? ' app-shell-logo--collapsed' : ''}`}>
+            <img src="/fms-logo.svg" alt="Fleet Management System" className="app-shell-logo-mark" />
             {!collapsed && (
-              <Typography.Text
-                style={{ color: '#fff', fontSize: 16, fontWeight: 500, lineHeight: '24px' }}
-              >
+              <Typography.Text className="app-shell-logo-text">
                 Fleet Management System
               </Typography.Text>
             )}
           </div>
-          {!collapsed && (
+
+          {collapsed ? (
+            <div className="app-shell-search-collapsed">
+              <Button
+                type="default"
+                icon={<SearchOutlined />}
+                aria-label="Search"
+                className="app-shell-search-icon-btn"
+              />
+            </div>
+          ) : (
             <Input
               placeholder="Search"
               suffix={<SearchOutlined style={{ color: 'rgba(255,255,255,0.45)' }} />}
-              style={{
-                background: '#21242a',
-                borderColor: 'rgba(255,255,255,0.45)',
-                marginBottom: 16,
-              }}
+              className="app-shell-search-input"
               styles={{
                 input: { color: '#fff', background: 'transparent' },
               }}
@@ -118,28 +121,26 @@ export default function AppShell() {
         <Menu
           theme="dark"
           mode="inline"
+          inlineCollapsed={collapsed}
           selectedKeys={isDetachmentPlanning ? ['detachment-planning'] : []}
-          defaultOpenKeys={cirrusOpen ? ['cirrus'] : []}
+          openKeys={collapsed ? [] : cirrusOpen ? ['cirrus'] : []}
+          onOpenChange={(keys) => {
+            if (!collapsed) {
+              setCirrusOpen(keys.includes('cirrus'));
+            }
+          }}
           items={sidebarMenuItems}
-          style={{ background: '#191b1e', border: 'none', flex: 1 }}
-          inlineIndent={20}
+          className="app-shell-menu"
         />
 
-        <div style={{ borderTop: '1px solid rgba(255,255,255,0.12)', padding: '12px 0' }}>
+        <div className="app-shell-sider-footer">
           <Menu
             theme="dark"
             mode="inline"
+            inlineCollapsed={collapsed}
             selectable={false}
-            items={[
-              { key: 'logout', icon: <LogoutOutlined />, label: 'Log Out' },
-              {
-                key: 'collapse',
-                icon: <MenuFoldOutlined />,
-                label: 'Collapse Menu',
-                onClick: () => setCollapsed((v) => !v),
-              },
-            ]}
-            style={{ background: 'transparent', border: 'none' }}
+            items={footerMenuItems}
+            className="app-shell-menu app-shell-menu--footer"
           />
         </div>
       </Sider>

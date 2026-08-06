@@ -76,18 +76,22 @@ function syncPlanMetrics(plan: PlatformPlan, lines: PlanLine[]): PlatformPlan {
   };
 }
 
+function buildInitialAppState() {
+  const planLinesMap: Record<string, PlanLine[]> = {};
+  for (const plan of MOCK_PLANS) {
+    planLinesMap[plan.id] = getDefaultPlanLines(plan);
+  }
+  const plans = MOCK_PLANS.map((plan) => syncPlanMetrics(plan, planLinesMap[plan.id]));
+  return { plans, planLinesMap };
+}
+
 export function AppProvider({ children }: { children: ReactNode }) {
+  const [initialState] = useState(buildInitialAppState);
   const [role, setRole] = useState<UserRole>('planner');
   const [plannerPlatform, setPlannerPlatform] = useState<Platform>('F-16');
   const [detachments, setDetachments] = useState<Detachment[]>(MOCK_DETACHMENTS);
-  const [plans, setPlans] = useState<PlatformPlan[]>(MOCK_PLANS);
-  const [planLinesMap, setPlanLinesMap] = useState<Record<string, PlanLine[]>>(() => {
-    const initial: Record<string, PlanLine[]> = {};
-    for (const plan of MOCK_PLANS) {
-      initial[plan.id] = getDefaultPlanLines(plan);
-    }
-    return initial;
-  });
+  const [plans, setPlans] = useState<PlatformPlan[]>(initialState.plans);
+  const [planLinesMap, setPlanLinesMap] = useState<Record<string, PlanLine[]>>(initialState.planLinesMap);
 
   const currentUser = role === 'planner' ? PLANNER_USER : DIRECTOR_USER;
 
