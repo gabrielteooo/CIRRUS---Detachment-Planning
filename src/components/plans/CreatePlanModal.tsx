@@ -102,12 +102,13 @@ export default function CreatePlanModal({
   const handleSubmit = async () => {
     try {
       const values = await form.validateFields();
+      const variantRows = form.getFieldValue('variantRows') ?? values.variantRows;
       const plan = createPlan({
         detachmentId: values.detachmentId,
         platform: values.platform,
         detachmentType: values.detachmentType,
         needByDate: values.needByDate.format('YYYY-MM-DD'),
-        variantRows: values.variantRows,
+        variantRows,
         remarks: values.remarks,
       });
       message.success('Detachment plan created');
@@ -255,7 +256,7 @@ export default function CreatePlanModal({
                       name={[name, 'lSeriesVersion']}
                       style={{ marginBottom: 0 }}
                     >
-                      <Input readOnly placeholder="L-series version" />
+                      <Input disabled placeholder="L-series version" />
                     </Form.Item>
                   </Col>
                   <Col span={8}>
