@@ -256,6 +256,10 @@ body {
   width: 180px;
 }
 
+.approval-pack-signoff-field--meeting .ant-input {
+  width: 240px;
+}
+
 .approval-pack-signoff-label {
   font-size: 12px;
   text-transform: uppercase;
@@ -297,7 +301,8 @@ body {
 
 @media (max-width: 960px) {
   .approval-pack-signoff-field--officer .ant-input,
-  .approval-pack-signoff-field--date .ant-picker {
+  .approval-pack-signoff-field--date .ant-picker,
+  .approval-pack-signoff-field--meeting .ant-input {
     width: 100%;
     min-width: 220px;
   }

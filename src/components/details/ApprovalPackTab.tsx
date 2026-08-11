@@ -59,6 +59,7 @@ export default function ApprovalPackTab({
 }: ApprovalPackTabProps) {
   const [approverName, setApproverName] = useState('');
   const [approvedDate, setApprovedDate] = useState<Dayjs | null>(null);
+  const [meeting, setMeeting] = useState('');
   const [showSignoffValidation, setShowSignoffValidation] = useState(false);
 
   const { shortfalls, deviations } = useMemo(
@@ -86,6 +87,7 @@ export default function ApprovalPackTab({
     return {
       approverName: approverName.trim(),
       approvedDate: approvedDate!.format('YYYY-MM-DD'),
+      meeting: meeting.trim() || undefined,
     };
   };
 
@@ -222,6 +224,19 @@ export default function ApprovalPackTab({
                 value={approvedDate}
                 onChange={setApprovedDate}
                 format="DD MMM YYYY"
+                disabled={viewOnly}
+              />
+            </Form.Item>
+          </div>
+          <div className="approval-pack-signoff-field approval-pack-signoff-field--meeting">
+            <Typography.Text type="secondary" className="approval-pack-signoff-label">
+              Meeting
+            </Typography.Text>
+            <Form.Item className="approval-pack-signoff-form-item">
+              <Input
+                value={meeting}
+                onChange={(e) => setMeeting(e.target.value)}
+                placeholder="e.g. Weekly logistics review"
                 disabled={viewOnly}
               />
             </Form.Item>

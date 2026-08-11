@@ -7,6 +7,7 @@ export type DeviationReason = string;
 export interface OfflineApprovalRecord {
   approverName: string;
   approvedDate: string;
+  meeting?: string;
 }
 
 export type InventoryStatus = 'In WH' | 'Blocked' | 'QI' | 'QIT';

@@ -162,6 +162,7 @@ export function applyDemoScenario(planId: string, lines: PlanLine[]): PlanLine[]
     offlineApproval: {
       approverName: 'MAJ Chen Li Hua',
       approvedDate: '2026-02-10',
+      meeting: 'Weekly logistics review',
     },
   });
 
@@ -182,6 +183,7 @@ export function applyDemoScenario(planId: string, lines: PlanLine[]): PlanLine[]
     offlineApproval: {
       approverName: 'LTC Tan Wei Ming',
       approvedDate: '2026-02-12',
+      meeting: 'Detachment readiness board',
     },
   });
 
