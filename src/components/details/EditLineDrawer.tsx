@@ -144,7 +144,7 @@ export default function EditLineDrawer({
         acceptQty: acceptAction?.qty ?? defaultQty,
         acceptRemarks: acceptAction?.type === 'accept' ? acceptAction.remarks : '',
         waitQty: waitAction?.qty ?? defaultQty,
-        waitRef: waitAction?.type === 'wait' ? waitAction.repairComponentRef : undefined,
+        waitRemarks: waitAction?.type === 'wait' ? waitAction.remarks : '',
         cannQty: cannAction?.qty ?? defaultQty,
         cannTail: cannAction?.type === 'cannibalise' ? cannAction.tailNumber : '',
         cannComments: cannAction?.type === 'cannibalise' ? cannAction.workCentreComments : '',
@@ -231,7 +231,7 @@ export default function EditLineDrawer({
                 return {
                   type: 'wait',
                   qty: values.waitQty ?? 1,
-                  repairComponentRef: values.waitRef,
+                  remarks: values.waitRemarks ?? '',
                   needByDate: planNeedByDate,
                   approved: existing?.approved ?? false,
                   targetNsn: shortfallTargetNsn,
@@ -473,11 +473,11 @@ export default function EditLineDrawer({
                     {selectedActions.includes('wait') && (
                       <ActionDetailFields>
                         <Form.Item
-                          name="waitRef"
-                          label="Component PO no."
-                          rules={[{ required: true, message: 'Enter PO no.' }]}
+                          name="waitRemarks"
+                          label="Remarks"
+                          rules={[{ required: true, message: 'Enter remarks' }]}
                         >
-                          <Input placeholder="Enter PO no." />
+                          <Input.TextArea rows={2} placeholder="Enter remarks" />
                         </Form.Item>
                         <div>
                           <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 4 }}>

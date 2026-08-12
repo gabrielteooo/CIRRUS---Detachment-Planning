@@ -319,6 +319,14 @@ body {
   margin-bottom: 16px;
 }
 
+.lseries-category-tabs .ant-tabs-nav {
+  margin-bottom: 0;
+}
+
+.lseries-category-tabs .ant-tabs-content {
+  margin-top: 0;
+}
+
 @media print {
   .approval-pack-tab-toolbar,
   .approval-pack-signoff-actions .ant-btn,
@@ -799,4 +807,194 @@ body {
   color: #00636a !important;
   font-weight: 500;
   padding-left: 0;
+}
+
+.system-config-card {
+  min-height: 180px;
+  border: 1px solid #f0f0f0;
+  border-radius: 8px;
+}
+
+.system-config-card-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  background: #e6f4f4;
+  color: #00636a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  margin-bottom: 16px;
+}
+
+.lseries-mgmt-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+.lseries-mgmt-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 20px;
+}
+
+@media (max-width: 1200px) {
+  .lseries-mgmt-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 960px) {
+  .lseries-mgmt-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .lseries-mgmt-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.lseries-mgmt-card {
+  border: 1px solid #f0f0f0;
+  border-radius: 8px;
+}
+
+.lseries-mgmt-card-meta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.lseries-mgmt-empty {
+  padding: 48px 24px;
+  text-align: center;
+  background: #fff;
+  border: 1px dashed #d9d9d9;
+  border-radius: 8px;
+}
+
+.lseries-details-header {
+  margin-bottom: 20px;
+}
+
+.lseries-inline-name {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.lseries-inline-name-pen {
+  color: rgba(0, 0, 0, 0.45);
+  cursor: pointer;
+}
+
+.lseries-inline-name-pen:hover {
+  color: #00636a;
+}
+
+.lseries-inline-name-edit {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 420px;
+}
+
+.lseries-inline-name-action {
+  color: rgba(0, 0, 0, 0.45);
+  cursor: pointer;
+}
+
+.lseries-preview-table-wrap {
+  padding-top: 16px;
+}
+
+.lseries-mpn-cell--stacked {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-start;
+}
+
+.lseries-mpn-cell-line {
+  display: block;
+  line-height: 20px;
+}
+
+.lseries-preview-table-section {
+  background: #fff;
+  border: 1px solid #f0f0f0;
+  border-radius: 8px;
+  padding: 16px 20px 20px;
+}
+
+.lseries-preview-page {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.lseries-preview-meta {
+  background: #fff;
+  border: 1px solid #f0f0f0;
+  border-radius: 8px;
+  padding: 20px 24px;
+}
+
+.lseries-preview-discard-btn {
+  color: #00636a !important;
+  font-weight: 500;
+}
+
+.lseries-discard-modal-actions {
+  display: flex;
+  gap: 16px;
+  margin-top: 40px;
+  padding-top: 40px;
+}
+
+.lseries-discard-modal .ant-modal-content {
+  padding: 48px 24px 40px;
+}
+
+.lseries-discard-modal-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.lseries-discard-modal-icon {
+  color: #d46b08;
+  font-size: 64px;
+  margin-bottom: 24px;
+}
+
+.lseries-discard-modal-title {
+  margin: 0 0 8px;
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 32px;
+  color: rgba(0, 0, 0, 0.88);
+}
+
+.lseries-discard-modal-description {
+  margin: 0;
+  max-width: 580px;
+  font-size: 14px;
+  line-height: 22px;
+  color: rgba(0, 0, 0, 0.55);
+}
+
+.lseries-discard-modal-actions {
+  display: flex;
+  gap: 16px;
+  margin-top: 40px;
+  padding-top: 40px;
 }

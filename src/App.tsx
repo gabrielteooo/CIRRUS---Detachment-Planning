@@ -6,6 +6,10 @@ import AppShell from './components/layout/AppShell';
 import PlanListPage from './pages/PlanListPage';
 import DetachmentDetailsPage from './pages/DetachmentDetailsPage';
 import PlanDetailsPage from './pages/PlanDetailsPage';
+import SystemConfigPage from './pages/SystemConfigPage';
+import LSeriesListPage from './pages/LSeriesListPage';
+import LSeriesDetailsPage from './pages/LSeriesDetailsPage';
+import LSeriesUploadPreviewPage from './pages/LSeriesUploadPreviewPage';
 import { AppProvider } from './context/AppContext';
 
 const PRIMARY = '#00636A';
@@ -54,6 +58,13 @@ export default function App() {
                 <Route path="/detachment-planning" element={<PlanListPage />} />
                 <Route path="/detachment-planning/:detachmentId" element={<DetachmentDetailsPage />} />
                 <Route path="/detachment-planning/plan/:planId" element={<PlanDetailsPage />} />
+                <Route path="/system-configurations" element={<SystemConfigPage />} />
+                <Route path="/system-configurations/l-series" element={<LSeriesListPage />} />
+                <Route
+                  path="/system-configurations/l-series/upload/preview"
+                  element={<LSeriesUploadPreviewPage />}
+                />
+                <Route path="/system-configurations/l-series/:lSeriesId" element={<LSeriesDetailsPage />} />
               </Route>
             </Routes>
           </Router>

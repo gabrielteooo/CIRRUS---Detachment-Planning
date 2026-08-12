@@ -1,7 +1,19 @@
 import { buildInterchangeableDemoLine } from './interchangeableLines';
-import { L_SERIES_TEMPLATE } from '../data/lSeriesTemplate';
 import type { Platform, PlatformPlan } from '../types/detachment';
+import type { LSeriesRecord } from '../types/lSeries';
 import type { InventoryItem, PlanLine } from '../types/planLine';
+import {
+  getGroupAvailableQty,
+  getLineStatus,
+  isPolLine,
+} from '../types/planLine';
+import {
+  L_SERIES_TEMPLATE,
+  componentAppliesToVariant,
+  getPolRequiredQty,
+  type ComponentCategory,
+  type LSPlatformTemplate,
+} from '../data/lSeriesTemplate';
 
 function hashSeed(text: string): number {
   let h = 0;
@@ -64,38 +76,140 @@ function buildInventory(
   return items;
 }
 
-export function getRequiredQty(platform: Platform, tier: number, nsn: string): number {
-  const component = L_SERIES_TEMPLATE[platform].components.find((c) => c.nsn === nsn);
+/** Ensure at least `minCount` operational lines are fulfilled with surplus available stock. */
+function ensureFulfilledExcessInventory(lines: PlanLine[], minCount = 2): PlanLine[] {
+  const result = lines.map((line) => ({ ...line }));
+
+  const countExcessMet = () =>
+    result.filter(
+      (line) =>
+        !isPolLine(line) &&
+        !line.isAddedNsn &&
+        getLineStatus(line) === 'Met' &&
+        getGroupAvailableQty(line) > line.requiredQty,
+    ).length;
+
+  if (countExcessMet() >= minCount) return result;
+
+  for (let i = 0; i < result.length && countExcessMet() < minCount; i += 1) {
+    const line = result[i];
+    if (isPolLine(line) || line.isAddedNsn) continue;
+    if (getLineStatus(line) !== 'Met') continue;
+    if (getGroupAvailableQty(line) > line.requiredQty) continue;
+
+    const availableQty = line.requiredQty + 2;
+    result[i] = {
+      ...line,
+      availableQty,
+      toBringQty: line.requiredQty,
+      inventory: buildInventory(line.nsn, line.description, availableQty),
+    };
+  }
+
+  return result;
+}
+
+export function getRequiredQty(
+  platform: Platform,
+  tier: number,
+  nsn: string,
+  template: LSPlatformTemplate = L_SERIES_TEMPLATE[platform],
+): number {
+  const component = template.components.find((c) => c.nsn === nsn);
   if (!component) return 0;
   return component.qtyByTier[String(tier)] ?? 0;
 }
 
-function computeRequiredQtyByNsn(plan: PlatformPlan): Map<string, { qty: number; description: string }> {
-  const template = L_SERIES_TEMPLATE[plan.platform];
-  const nsnMap = new Map<string, { qty: number; description: string }>();
+function resolvePlanTemplate(plan: PlatformPlan, lSeriesRecords: LSeriesRecord[]): LSPlatformTemplate {
+  const record = lSeriesRecords.find((item) => item.id === plan.lSeriesId);
+  if (record) return record.template;
+  return L_SERIES_TEMPLATE[plan.platform];
+}
+
+function computeRequiredQtyByNsn(
+  plan: PlatformPlan,
+  template: LSPlatformTemplate,
+): Map<
+  string,
+  {
+    qty: number;
+    description: string;
+    category: ComponentCategory;
+    uom?: string;
+    mpn?: string;
+    trade?: string;
+    system?: string;
+  }
+> {
+  const nsnMap = new Map<
+    string,
+    {
+      qty: number;
+      description: string;
+      category: ComponentCategory;
+      uom?: string;
+      mpn?: string;
+      trade?: string;
+      system?: string;
+    }
+  >();
+
+  const addComponent = (
+    component: (typeof template.components)[number],
+    qty: number,
+  ) => {
+    if (qty <= 0) return;
+    const existing = nsnMap.get(component.nsn);
+    if (existing) {
+      existing.qty += qty;
+      return;
+    }
+    nsnMap.set(component.nsn, {
+      qty,
+      description: component.description,
+      category: component.category,
+      uom: component.uom,
+      mpn: component.mpn,
+      trade: component.trade,
+      system: component.system,
+    });
+  };
 
   for (const row of plan.variantRows) {
     for (const component of template.components) {
+      if (component.category === 'POL') continue;
       const qty = component.qtyByTier[String(row.parameterTier)] ?? 0;
-      const existing = nsnMap.get(component.nsn);
-      if (existing) {
-        existing.qty += qty;
-      } else {
-        nsnMap.set(component.nsn, { qty, description: component.description });
-      }
+      addComponent(component, qty);
     }
+  }
+
+  const planVariants = new Set(plan.variantRows.map((row) => row.variant));
+  for (const component of template.components) {
+    if (component.category !== 'POL') continue;
+    const appliesToPlan = [...planVariants].some((variant) =>
+      componentAppliesToVariant(component, variant),
+    );
+    if (!appliesToPlan) continue;
+    addComponent(component, getPolRequiredQty(component));
   }
 
   return nsnMap;
 }
 
-export function buildPlanLinesFromTemplate(plan: PlatformPlan): PlanLine[] {
-  const nsnMap = computeRequiredQtyByNsn(plan);
+export function buildPlanLinesFromTemplate(
+  plan: PlatformPlan,
+  lSeriesRecords: LSeriesRecord[] = [],
+): PlanLine[] {
+  const template = resolvePlanTemplate(plan, lSeriesRecords);
+  const nsnMap = computeRequiredQtyByNsn(plan, template);
   let index = 0;
 
-  return [...nsnMap.entries()].map(([nsn, { qty: requiredQty, description }]) => {
+  return [...nsnMap.entries()].map(([nsn, { qty: requiredQty, description, category, uom, mpn, trade, system }]) => {
     index += 1;
-    const availableQty = mockAvailableQty(requiredQty, nsn, plan.id);
+    const isPol = category === 'POL';
+    const availableQty = isPol
+      ? requiredQty
+      : mockAvailableQty(requiredQty, nsn, plan.id);
     const inventory = buildInventory(nsn, description, availableQty);
 
     return {
@@ -107,6 +221,12 @@ export function buildPlanLinesFromTemplate(plan: PlatformPlan): PlanLine[] {
       toBringQty: requiredQty,
       inventory,
       shortfallActions: [],
+      componentCategory: category,
+      uom,
+      mpn,
+      trade,
+      system,
+      remarks: '',
     };
   });
 }
@@ -120,24 +240,24 @@ export function applyDemoScenario(planId: string, lines: PlanLine[]): PlanLine[]
     if (idx >= 0) lines[idx] = { ...lines[idx], ...updates };
   };
 
-  patch('1560-01-234', {
+  patch('1560-01-2421', {
     availableQty: 0,
     toBringQty: 2,
     inventory: [
-      { type: 'Main', nsn: '1560-01-234', description: 'Hydraulic Pump, Utility System', location: 'WH-A / Rack 3', qty: 1, status: 'In WH' },
-      { type: 'Alt', nsn: '1560-01-234-ALT', description: 'Hydraulic Pump, Utility System (alternate)', location: 'WH-B / Rack 1', qty: 0, status: 'Blocked' },
+      { type: 'Main', nsn: '1560-01-2421', description: 'Hydraulic Pump', location: 'WH-A / Rack 3', qty: 1, status: 'In WH' },
+      { type: 'Alt', nsn: '1560-01-2421-ALT', description: 'Hydraulic Pump (alternate)', location: 'WH-B / Rack 1', qty: 0, status: 'Blocked' },
     ],
     shortfallActions: [
-      { type: 'wait', qty: 1, needByDate: '2026-03-01', repairComponentRef: 'PO1234567', approved: false },
+      { type: 'wait', qty: 1, needByDate: '2026-03-01', remarks: 'Expedite repair — PO1234567 expected end Feb', approved: false },
       { type: 'cannibalise', qty: 1, tailNumber: 'AF-2041', workCentreComments: 'Confirmed with Hangar 3 MRO', confirmedWithWorkCentre: true, approved: false },
     ],
   });
 
-  patch('1560-01-232', {
+  patch('1560-01-2311', {
     availableQty: 0,
     toBringQty: 0,
     inventory: [
-      { type: 'Main', nsn: '1560-01-232', description: 'Fuel Control Unit, Main Engine', location: 'WH-A / Rack 7', qty: 0, status: 'QI' },
+      { type: 'Main', nsn: '1560-01-2311', description: 'Engine Fuel Pump', location: 'WH-A / Rack 7', qty: 0, status: 'QI' },
     ],
     shortfallActions: [
       {
@@ -149,36 +269,19 @@ export function applyDemoScenario(planId: string, lines: PlanLine[]): PlanLine[]
     ],
   });
 
-  patch('1560-01-230', {
-    availableQty: 6,
-    toBringQty: 5,
-  });
-
-  patch('1560-01-245', {
-    availableQty: 30,
-    toBringQty: (lines.find((l) => l.nsn === '1560-01-245')?.requiredQty ?? 20) + 5,
-    deviationReason: 'Exercise needs',
-    deviationRemarks: 'Additional fasteners for extended deployment',
-    offlineApproval: {
-      approverName: 'MAJ Chen Li Hua',
-      approvedDate: '2026-02-10',
-      meeting: 'Weekly logistics review',
-    },
-  });
-
-  patch('1560-01-241', {
+  patch('1560-01-2355', {
     availableQty: 0,
     inventory: [
-      { type: 'Main', nsn: '1560-01-241', description: 'AN/APG-68 Radar LRU (Transmitter)', location: 'WH-D / Secure', qty: 0, status: 'QIT' },
+      { type: 'Main', nsn: '1560-01-2355', description: 'Radar Line-Replaceable Unit', location: 'WH-D / Secure', qty: 0, status: 'QIT' },
     ],
     shortfallActions: [],
   });
 
-  patch('1560-01-246', {
+  patch('7045-18-2639', {
     availableQty: 3,
     toBringQty: 5,
     shortfallActions: [
-      { type: 'wait', qty: 2, needByDate: '2026-03-01', repairComponentRef: 'PO2345678', approved: true },
+      { type: 'wait', qty: 2, needByDate: '2026-03-01', remarks: 'Awaiting filter element delivery from supplier', approved: true },
     ],
     offlineApproval: {
       approverName: 'LTC Tan Wei Ming',
@@ -187,15 +290,31 @@ export function applyDemoScenario(planId: string, lines: PlanLine[]): PlanLine[]
     },
   });
 
-  const igniterIdx = lines.findIndex((l) => l.nsn === '1560-01-233');
-  if (igniterIdx >= 0) {
-    lines[igniterIdx] = buildInterchangeableDemoLine(lines[igniterIdx]);
+  patch('1560-01-2322', {
+    availableQty: 3,
+    toBringQty: 1,
+    inventory: buildInventory('1560-01-2322', 'Engine Oil Pump', 3),
+  });
+
+  patch('1560-01-2344', {
+    availableQty: 2,
+    toBringQty: 1,
+    inventory: buildInventory('1560-01-2344', 'Main Generator', 2),
+  });
+
+  const starterGenIdx = lines.findIndex((l) => l.nsn === '1560-01-2333');
+  if (starterGenIdx >= 0) {
+    lines[starterGenIdx] = buildInterchangeableDemoLine(lines[starterGenIdx]);
   }
 
   return lines;
 }
 
-export function getDefaultPlanLinesForPlan(plan: PlatformPlan): PlanLine[] {
-  const lines = buildPlanLinesFromTemplate(plan);
-  return applyDemoScenario(plan.id, lines);
+export function getDefaultPlanLinesForPlan(
+  plan: PlatformPlan,
+  lSeriesRecords: LSeriesRecord[] = [],
+): PlanLine[] {
+  const lines = buildPlanLinesFromTemplate(plan, lSeriesRecords);
+  const withDemo = applyDemoScenario(plan.id, lines);
+  return ensureFulfilledExcessInventory(withDemo);
 }

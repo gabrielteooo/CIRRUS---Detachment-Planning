@@ -4,6 +4,8 @@ export type ShortfallActionType = 'accept' | 'wait' | 'cannibalise';
 
 export type DeviationReason = string;
 
+export type ComponentCategory = 'LRU' | 'Consumable' | 'POL';
+
 export interface OfflineApprovalRecord {
   approverName: string;
   approvedDate: string;
@@ -32,7 +34,7 @@ export interface AcceptShortfallAction {
 export interface WaitShortfallAction {
   type: 'wait';
   qty: number;
-  repairComponentRef: string;
+  remarks: string;
   needByDate: string;
   approved: boolean;
   targetNsn?: string;
@@ -84,6 +86,13 @@ export interface PlanLine {
   offlineApproval?: OfflineApprovalRecord;
   /** User-added NSN for exercise needs; not from L-series template. */
   isAddedNsn?: boolean;
+  componentCategory?: ComponentCategory;
+  uom?: string;
+  mpn?: string;
+  trade?: string;
+  system?: string;
+  /** Component notes from L-series template (shown on LRU / Consumable / POL tabs). */
+  remarks?: string;
   interchangeableMembers?: InterchangeableMember[];
   toBringAllocation?: ToBringAllocation[];
   /** Default member NSN to top up when resolving group shortfall. */
@@ -102,7 +111,17 @@ export function formatLineStatus(status: LineStatus): string {
   return status;
 }
 
+export function isPolLine(line: PlanLine): boolean {
+  return line.componentCategory === 'POL';
+}
+
+/** LRU and Consumable lines that participate in shortfall / deviation workflow. */
+export function getOperationalLines(lines: PlanLine[]): PlanLine[] {
+  return lines.filter((line) => !isPolLine(line));
+}
+
 export function getLineStatus(line: PlanLine): LineStatus {
+  if (isPolLine(line)) return 'Met';
   if (getGroupAvailableQty(line) < line.requiredQty) return 'Shortfall';
   if (line.isAddedNsn || line.toBringQty > line.requiredQty) return 'Deviation';
   return 'Met';
@@ -127,17 +146,18 @@ export function canDeviateQty(line: PlanLine): boolean {
 }
 
 export function computeFillRate(lines: PlanLine[]): number {
-  if (lines.length === 0) return 0;
-  const metCount = lines.filter((l) => getLineStatus(l) === 'Met').length;
-  return Math.round((metCount / lines.length) * 100);
+  const operational = getOperationalLines(lines);
+  if (operational.length === 0) return 0;
+  const metCount = operational.filter((l) => getLineStatus(l) === 'Met').length;
+  return Math.round((metCount / operational.length) * 100);
 }
 
 export function countShortfalls(lines: PlanLine[]): number {
-  return lines.filter((l) => getLineStatus(l) === 'Shortfall').length;
+  return getOperationalLines(lines).filter((l) => getLineStatus(l) === 'Shortfall').length;
 }
 
 export function countDeviations(lines: PlanLine[]): number {
-  return lines.filter((l) => getLineStatus(l) === 'Deviation').length;
+  return getOperationalLines(lines).filter((l) => getLineStatus(l) === 'Deviation').length;
 }
 
 export function countCannibalisation(lines: PlanLine[]): number {
@@ -287,6 +307,7 @@ export function getLineActionLabel(line: PlanLine): 'Resolve' | 'Edit' | 'Deviat
 }
 
 export function lineNeedsApproval(line: PlanLine): boolean {
+  if (isPolLine(line)) return false;
   const status = getLineStatus(line);
   if (status === 'Shortfall') return line.shortfallActions.length > 0;
   if (status === 'Deviation') {
@@ -367,9 +388,9 @@ export function sortShortfallLinesByApproval(lines: PlanLine[]): PlanLine[] {
   return [...lines].sort((a, b) => rank(a) - rank(b));
 }
 
-/** Shortfalls without resolution — work queue only; deviations are excluded. */
+/** Shortfalls without resolution — work queue only; deviations and POL are excluded. */
 export function getWorkQueueLines(lines: PlanLine[]): PlanLine[] {
-  return lines.filter(isShortfallUnresolved);
+  return getOperationalLines(lines).filter(isShortfallUnresolved);
 }
 
 /** Shortfalls and deviations with resolution recorded (pending or approved). */

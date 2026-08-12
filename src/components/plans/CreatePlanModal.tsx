@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import {
   Modal,
   Form,
@@ -13,14 +13,7 @@ import {
 } from 'antd';
 import { PlusOutlined, MinusCircleOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
-import {
-  PLATFORM_VARIANTS,
-  F16_FLYING_HOUR_TIERS,
-  CH47_AIRCRAFT_TIERS,
-} from '../../data/mockPlans';
-import { L_SERIES_VERSION_IDS } from '../../data/lSeriesTemplate';
-import type { Platform } from '../../types/detachment';
-import { DETACHMENT_TYPE_OPTIONS } from '../../types/detachment';
+import { PLATFORM_VARIANTS, F16_FLYING_HOUR_TIERS, CH47_AIRCRAFT_TIERS } from '../../data/mockPlans';
 import { useApp } from '../../context/AppContext';
 import { formatDate } from '../../utils/planUtils';
 
@@ -37,32 +30,46 @@ export default function CreatePlanModal({
 }: CreatePlanModalProps) {
   const [form] = Form.useForm();
   const navigate = useNavigate();
-  const { detachments, createPlan, getPlansForDetachment, role, plannerPlatform } = useApp();
+  const { detachments, createPlan, getPlansForDetachment, role, plannerPlatform, lSeriesRecords } =
+    useApp();
 
   const detachmentId = Form.useWatch('detachmentId', form) as string | undefined;
-  const platform = Form.useWatch('platform', form) as Platform | undefined;
+  const lSeriesId = Form.useWatch('lSeriesId', form) as string | undefined;
   const selectedDetachment = detachments.find((d) => d.id === detachmentId);
+  const selectedLSeries = lSeriesRecords.find((record) => record.id === lSeriesId);
+  const platform = selectedLSeries?.platform;
 
   const isDirector = role === 'director';
   const lockedPlatform = isDirector ? platform : plannerPlatform;
+
+  const lSeriesOptions = useMemo(() => {
+    let records = lSeriesRecords;
+    if (!isDirector) {
+      records = records.filter((record) => record.platform === plannerPlatform);
+    }
+    return records.map((record) => ({
+      label: `${record.platform} · ${record.missionType} — ${record.name} (v${record.version})`,
+      value: record.id,
+      disabled: detachmentId
+        ? getPlansForDetachment(detachmentId).some((plan) => plan.lSeriesId === record.id)
+        : false,
+    }));
+  }, [lSeriesRecords, isDirector, plannerPlatform, detachmentId, getPlansForDetachment]);
 
   useEffect(() => {
     if (open && preselectedDetachmentId) {
       form.setFieldValue('detachmentId', preselectedDetachmentId);
     }
     if (open && !isDirector) {
+      const defaultRecord = lSeriesRecords.find(
+        (record) => record.platform === plannerPlatform && record.missionType === 'Long',
+      );
       form.setFieldsValue({
-        platform: plannerPlatform,
-        variantRows: [
-          {
-            variant: undefined,
-            lSeriesVersion: L_SERIES_VERSION_IDS[plannerPlatform],
-            parameterTier: undefined,
-          },
-        ],
+        lSeriesId: defaultRecord?.id,
+        variantRows: [{ variant: undefined, parameterTier: undefined }],
       });
     }
-  }, [open, preselectedDetachmentId, form, isDirector, plannerPlatform]);
+  }, [open, preselectedDetachmentId, form, isDirector, plannerPlatform, lSeriesRecords]);
 
   const existingPlatforms = detachmentId
     ? getPlansForDetachment(detachmentId).map((p) => p.platform)
@@ -75,38 +82,40 @@ export default function CreatePlanModal({
         ? CH47_AIRCRAFT_TIERS.map((t) => ({ label: `${t} aircraft`, value: t }))
         : [];
 
-  const handleDetachmentChange = () => {
-    // Detachment date is shown read-only from selected detachment
+  const handleLSeriesChange = (value: string) => {
+    const record = lSeriesRecords.find((item) => item.id === value);
+    if (!record) return;
+    if (!isDirector && existingPlatforms.includes(record.platform)) {
+      message.warning(`A ${record.platform} plan already exists for this detachment.`);
+    }
+    form.setFieldValue('variantRows', [{ variant: undefined, parameterTier: undefined }]);
   };
 
-  const handlePlatformChange = (value: Platform) => {
-    form.setFieldValue('variantRows', [
-      {
-        variant: undefined,
-        lSeriesVersion: L_SERIES_VERSION_IDS[value],
-        parameterTier: undefined,
-      },
-    ]);
-  };
-
-  const handleVariantChange = (variant: string, index: number) => {
-    const rows = form.getFieldValue('variantRows') ?? [];
-    rows[index] = {
-      ...rows[index],
-      variant,
-      lSeriesVersion: L_SERIES_VERSION_IDS[platform ?? 'F-16'],
-    };
-    form.setFieldValue('variantRows', rows);
+  const handleVariantChange = (_variant: string, _index: number) => {
+    // variant row only — L-series is selected at plan level
   };
 
   const handleSubmit = async () => {
     try {
       const values = await form.validateFields();
-      const variantRows = form.getFieldValue('variantRows') ?? values.variantRows;
+      const record = lSeriesRecords.find((item) => item.id === values.lSeriesId);
+      if (!record) {
+        message.error('Select a valid L-series.');
+        return;
+      }
+
+      const variantRows = (form.getFieldValue('variantRows') ?? values.variantRows).map(
+        (row: { variant: string; parameterTier: number }) => ({
+          ...row,
+          lSeriesVersion: record.name,
+        }),
+      );
+
       const plan = createPlan({
         detachmentId: values.detachmentId,
-        platform: values.platform,
-        detachmentType: values.detachmentType,
+        lSeriesId: record.id,
+        platform: record.platform,
+        detachmentType: record.missionType,
         needByDate: values.needByDate.format('YYYY-MM-DD'),
         variantRows,
         remarks: values.remarks,
@@ -139,14 +148,7 @@ export default function CreatePlanModal({
         layout="vertical"
         initialValues={{
           detachmentId: preselectedDetachmentId,
-          platform: plannerPlatform,
-          variantRows: [
-            {
-              variant: undefined,
-              lSeriesVersion: L_SERIES_VERSION_IDS[plannerPlatform],
-              parameterTier: undefined,
-            },
-          ],
+          variantRows: [{ variant: undefined, parameterTier: undefined }],
         }}
         style={{ marginTop: 16 }}
       >
@@ -163,7 +165,6 @@ export default function CreatePlanModal({
                   label: d.name,
                   value: d.id,
                 }))}
-                onChange={handleDetachmentChange}
               />
             </Form.Item>
           </Col>
@@ -179,52 +180,79 @@ export default function CreatePlanModal({
         </Row>
 
         <Row gutter={16}>
-          <Col span={12}>
+          <Col span={24}>
             <Form.Item
-              name="platform"
-              label="Platform"
-              rules={[{ required: true }]}
+              name="lSeriesId"
+              label="L-series"
+              rules={[{ required: true, message: 'Select an L-series' }]}
+              extra="Platform and mission type are determined by the selected L-series."
             >
               <Select
-                disabled={!isDirector}
-                options={[
-                  { label: 'F-16', value: 'F-16', disabled: existingPlatforms.includes('F-16') },
-                  { label: 'CH-47', value: 'CH-47', disabled: existingPlatforms.includes('CH-47') },
-                ]}
-                onChange={handlePlatformChange}
-              />
-            </Form.Item>
-          </Col>
-          <Col span={12}>
-            <Form.Item
-              name="detachmentType"
-              label="Detachment Type"
-              rules={[{ required: true, message: 'Select detachment type' }]}
-            >
-              <Select
-                placeholder="Select type"
-                options={DETACHMENT_TYPE_OPTIONS.map((type) => ({
-                  label: type,
-                  value: type,
+                placeholder="Select L-series (platform · mission type)"
+                options={lSeriesOptions.map((option) => ({
+                  ...option,
+                  disabled:
+                    option.disabled ||
+                    (!isDirector &&
+                      lSeriesRecords.find((record) => record.id === option.value)?.platform !==
+                        plannerPlatform) ||
+                    (!!detachmentId &&
+                      !!lSeriesRecords.find((record) => record.id === option.value) &&
+                      existingPlatforms.includes(
+                        lSeriesRecords.find((record) => record.id === option.value)!.platform,
+                      )),
                 }))}
+                onChange={handleLSeriesChange}
               />
             </Form.Item>
           </Col>
         </Row>
 
-        <Form.Item
-          name="needByDate"
-          label="Need-by-date"
-          rules={[{ required: true, message: 'Select need-by-date' }]}
-        >
-          <DatePicker style={{ width: '100%' }} format="D MMM YYYY" />
-        </Form.Item>
+        <Row gutter={16}>
+          <Col span={12}>
+            <Form.Item label="Platform">
+              <Input readOnly value={selectedLSeries?.platform ?? ''} placeholder="Select L-series" />
+            </Form.Item>
+          </Col>
+          <Col span={12}>
+            <Form.Item label="Mission type">
+              <Input
+                readOnly
+                value={selectedLSeries?.missionType ?? ''}
+                placeholder="Select L-series"
+              />
+            </Form.Item>
+          </Col>
+        </Row>
+
+        <Row gutter={16}>
+          <Col span={12}>
+            <Form.Item
+              name="needByDate"
+              label="Need-by-date"
+              rules={[{ required: true, message: 'Select need-by-date' }]}
+            >
+              <DatePicker style={{ width: '100%' }} format="D MMM YYYY" />
+            </Form.Item>
+          </Col>
+          <Col span={12}>
+            <Form.Item label="L-series version">
+              <Input
+                readOnly
+                value={
+                  selectedLSeries ? `${selectedLSeries.name} (v${selectedLSeries.version})` : ''
+                }
+                placeholder="Select L-series"
+              />
+            </Form.Item>
+          </Col>
+        </Row>
 
         <Typography.Text strong style={{ display: 'block', marginBottom: 8 }}>
           Variants
         </Typography.Text>
         <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 12, fontSize: 13 }}>
-          Each variant has its own L-series and flying hours. Add a row for each variant in this plan.
+          Add a row for each variant in this plan. Flying hours apply per variant.
         </Typography.Text>
 
         <Form.List name="variantRows">
@@ -232,7 +260,7 @@ export default function CreatePlanModal({
             <>
               {fields.map(({ key, name, ...restField }) => (
                 <Row gutter={12} key={key} align="middle" style={{ marginBottom: 8 }}>
-                  <Col span={6}>
+                  <Col span={11}>
                     <Form.Item
                       {...restField}
                       name={[name, 'variant']}
@@ -250,16 +278,7 @@ export default function CreatePlanModal({
                       />
                     </Form.Item>
                   </Col>
-                  <Col span={8}>
-                    <Form.Item
-                      {...restField}
-                      name={[name, 'lSeriesVersion']}
-                      style={{ marginBottom: 0 }}
-                    >
-                      <Input disabled placeholder="L-series version" />
-                    </Form.Item>
-                  </Col>
-                  <Col span={8}>
+                  <Col span={11}>
                     <Form.Item
                       {...restField}
                       name={[name, 'parameterTier']}
@@ -290,7 +309,6 @@ export default function CreatePlanModal({
                 onClick={() =>
                   add({
                     variant: undefined,
-                    lSeriesVersion: L_SERIES_VERSION_IDS[platform ?? 'F-16'],
                     parameterTier: undefined,
                   })
                 }

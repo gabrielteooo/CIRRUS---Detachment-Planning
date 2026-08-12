@@ -42,6 +42,7 @@ export interface PlatformPlan {
   detachmentId: string;
   platform: Platform;
   detachmentType: DetachmentType;
+  lSeriesId: string;
   needByDate: string;
   variantRows: PlanVariantRow[];
   status: PlanStatus;

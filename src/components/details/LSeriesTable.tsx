@@ -1,20 +1,19 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Button, Input, Popconfirm, Select, Space, Table, Tag, Typography } from 'antd';
+import { Badge, Button, Input, Popconfirm, Select, Space, Table, Tabs, Tag, Typography } from 'antd';
 import { PlusOutlined, SearchOutlined } from '@ant-design/icons';
-import type { PlanLine } from '../../types/planLine';
+import type { PlanLine, ComponentCategory } from '../../types/planLine';
 import { formatLineStatus, getLineActionLabel, getLineStatus } from '../../types/planLine';
 import type { Platform } from '../../types/detachment';
+import { COMPONENT_CATEGORIES } from '../../data/lSeriesTemplate';
 import {
-  getNsnMpnDescriptionColumns,
-  getPlatformVariantColumn,
-  getRequiredColumn,
-  getAvailableColumn,
-  getAvailableColumnLinkRenderer,
-  getToBringColumn,
+  getOperationalComponentColumns,
+  getPolReferenceColumns,
   ACTION_COLUMN_WIDTH,
   STATUS_COLUMN_WIDTH,
   DETACHMENT_TABLE_LAYOUT,
-  DETACHMENT_TABLE_SCROLL_X,
+  LRU_OPERATIONAL_TABLE_SCROLL_X,
+  CONSUMABLE_OPERATIONAL_TABLE_SCROLL_X,
+  POL_REFERENCE_TABLE_SCROLL_X,
 } from './nsnTableColumns';
 
 interface LSeriesTableProps {
@@ -35,10 +34,21 @@ const STATUS_COLORS: Record<string, string> = {
   Shortfall: 'error',
 };
 
+const CATEGORY_LABELS: Record<ComponentCategory, string> = {
+  LRU: 'LRU',
+  Consumable: 'Consumable',
+  POL: 'POL',
+};
+
 function sortLinesForDisplay(lines: PlanLine[]): PlanLine[] {
   const added = lines.filter((line) => line.isAddedNsn);
   const template = lines.filter((line) => !line.isAddedNsn);
   return [...added, ...template];
+}
+
+function lineMatchesCategory(line: PlanLine, category: ComponentCategory): boolean {
+  if (line.isAddedNsn) return category === 'LRU';
+  return line.componentCategory === category;
 }
 
 export default function LSeriesTable({
@@ -52,20 +62,42 @@ export default function LSeriesTable({
   onAddNsn,
   onDeleteLine,
 }: LSeriesTableProps) {
+  const [activeCategory, setActiveCategory] = useState<ComponentCategory>('LRU');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [page, setPage] = useState(1);
   const addedCount = lines.filter((line) => line.isAddedNsn).length;
+  const isPolTab = activeCategory === 'POL';
 
   useEffect(() => {
     setPage(1);
-  }, [addedCount]);
+  }, [addedCount, activeCategory, search, statusFilter]);
+
+  useEffect(() => {
+    if (isPolTab && statusFilter !== 'all') {
+      setStatusFilter('all');
+    }
+  }, [isPolTab, statusFilter]);
 
   const sortedLines = useMemo(() => sortLinesForDisplay(lines), [lines]);
 
+  const categoryCounts = useMemo(
+    () =>
+      COMPONENT_CATEGORIES.reduce(
+        (counts, category) => {
+          counts[category] = sortedLines.filter((line) => lineMatchesCategory(line, category)).length;
+          return counts;
+        },
+        {} as Record<ComponentCategory, number>,
+      ),
+    [sortedLines],
+  );
+
+  const isLruTab = activeCategory === 'LRU';
+
   const filtered = useMemo(() => {
-    let result = sortedLines;
-    if (statusFilter !== 'all') {
+    let result = sortedLines.filter((line) => lineMatchesCategory(line, activeCategory));
+    if (!isPolTab && statusFilter !== 'all') {
       result = result.filter((l) => getLineStatus(l) === statusFilter);
     }
     if (search.trim()) {
@@ -77,14 +109,19 @@ export default function LSeriesTable({
       );
     }
     return result;
-  }, [sortedLines, search, statusFilter]);
+  }, [sortedLines, activeCategory, search, statusFilter, isPolTab]);
 
-  const columns = [
-    ...getNsnMpnDescriptionColumns<PlanLine>(onViewNsn),
-    getPlatformVariantColumn<PlanLine>(platform, variant),
-    getRequiredColumn<PlanLine>(),
-    getAvailableColumn<PlanLine>(getAvailableColumnLinkRenderer(onViewInventory)),
-    getToBringColumn<PlanLine>(),
+  const operationalColumns = !isPolTab
+      ? getOperationalComponentColumns(
+          activeCategory as Extract<ComponentCategory, 'LRU' | 'Consumable'>,
+          platform,
+          variant,
+          onViewNsn,
+          onViewInventory,
+        )
+      : [];
+
+  const statusAndActionColumns = [
     {
       title: 'Status',
       key: 'status',
@@ -127,6 +164,76 @@ export default function LSeriesTable({
     },
   ];
 
+  const columns = isPolTab
+    ? getPolReferenceColumns<PlanLine>(platform, variant)
+    : [...operationalColumns, ...statusAndActionColumns];
+
+  const tableScrollX = isPolTab
+    ? POL_REFERENCE_TABLE_SCROLL_X
+    : isLruTab
+      ? LRU_OPERATIONAL_TABLE_SCROLL_X
+      : CONSUMABLE_OPERATIONAL_TABLE_SCROLL_X;
+
+  const pageSize = isPolTab ? Math.max(5, filtered.length) : 10;
+
+  const tableContent = (
+    <>
+      <div style={{ display: 'flex', gap: 12, marginTop: 12, marginBottom: 12 }}>
+        <Input
+          placeholder="Search components"
+          prefix={<SearchOutlined />}
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          style={{ width: 260 }}
+          allowClear
+        />
+        {!isPolTab && (
+          <Select
+            value={statusFilter}
+            onChange={setStatusFilter}
+            style={{ width: 140 }}
+            options={[
+              { label: 'All statuses', value: 'all' },
+              { label: 'Fulfilled', value: 'Met' },
+              { label: 'Deviation', value: 'Deviation' },
+              { label: 'Shortfall', value: 'Shortfall' },
+            ]}
+          />
+        )}
+      </div>
+      <div className="detachment-table-container">
+        <Table
+          dataSource={filtered}
+          columns={columns}
+          rowKey="id"
+          pagination={{
+            current: page,
+            pageSize,
+            showSizeChanger: false,
+            onChange: setPage,
+          }}
+          size="middle"
+          tableLayout={DETACHMENT_TABLE_LAYOUT}
+          scroll={{ x: tableScrollX }}
+        />
+      </div>
+    </>
+  );
+
+  const categoryTabs = COMPONENT_CATEGORIES.map((category) => ({
+    key: category,
+    label: (
+      <Space size={8}>
+        {CATEGORY_LABELS[category]}
+        <Badge
+          count={categoryCounts[category]}
+          overflowCount={999}
+          style={{ backgroundColor: '#00636a' }}
+        />
+      </Space>
+    ),
+  }));
+
   return (
     <div className="lseries-section">
       <div className="lseries-section-header">
@@ -144,43 +251,14 @@ export default function LSeriesTable({
         )}
       </div>
 
-      <div style={{ display: 'flex', gap: 12, marginTop: 12, marginBottom: 12 }}>
-        <Input
-          placeholder="Search components"
-          prefix={<SearchOutlined />}
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          style={{ width: 260 }}
-          allowClear
-        />
-        <Select
-          value={statusFilter}
-          onChange={setStatusFilter}
-          style={{ width: 140 }}
-          options={[
-            { label: 'All statuses', value: 'all' },
-            { label: 'Fulfilled', value: 'Met' },
-            { label: 'Deviation', value: 'Deviation' },
-            { label: 'Shortfall', value: 'Shortfall' },
-          ]}
-        />
-      </div>
-      <div className="detachment-table-container">
-        <Table
-          dataSource={filtered}
-          columns={columns}
-          rowKey="id"
-          pagination={{
-            current: page,
-            pageSize: 10,
-            showSizeChanger: false,
-            onChange: setPage,
-          }}
-          size="middle"
-          tableLayout={DETACHMENT_TABLE_LAYOUT}
-          scroll={{ x: DETACHMENT_TABLE_SCROLL_X }}
-        />
-      </div>
+      <Tabs
+        className="lseries-category-tabs"
+        activeKey={activeCategory}
+        onChange={(key) => setActiveCategory(key as ComponentCategory)}
+        items={categoryTabs}
+      />
+
+      {tableContent}
     </div>
   );
 }

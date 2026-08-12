@@ -1,18 +1,66 @@
-import { Avatar, Breadcrumb, Button, Typography } from 'antd';
+import { Avatar, Breadcrumb, Button, Space, Typography } from 'antd';
 import { ArrowLeftOutlined, BellOutlined, HomeOutlined, QuestionCircleOutlined } from '@ant-design/icons';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import { DATA_SYNC_TIMESTAMP } from '../../types/detachment';
 
-export default function PageHeader() {
+function usePageMeta() {
   const location = useLocation();
-  const navigate = useNavigate();
-  const { detachmentId } = useParams();
-  const { getDetachment, currentUser } = useApp();
+  const { detachmentId, lSeriesId } = useParams();
+  const { getDetachment, getLSeriesRecord } = useApp();
+
+  if (location.pathname.startsWith('/system-configurations/l-series/upload/preview')) {
+    return {
+      breadcrumbTrail: ['System Configurations', 'L-series Management', 'Preview'],
+      title: 'Preview',
+      backTo: '/system-configurations/l-series',
+      isPreviewPage: true,
+    };
+  }
+
+  if (location.pathname.startsWith('/system-configurations/l-series/') && lSeriesId) {
+    const record = getLSeriesRecord(lSeriesId);
+    return {
+      breadcrumbTrail: ['System Configurations', 'L-series Management', record?.name ?? 'Details'],
+      title: record?.name ?? 'L-series details',
+      backTo: '/system-configurations/l-series',
+    };
+  }
+
+  if (location.pathname === '/system-configurations/l-series') {
+    return {
+      breadcrumbTrail: ['System Configurations', 'L-series Management'],
+      title: 'L-series Management',
+      backTo: '/system-configurations',
+    };
+  }
+
+  if (location.pathname === '/system-configurations') {
+    return {
+      breadcrumbTrail: ['System Configurations'],
+      title: 'System Configurations',
+      backTo: null,
+    };
+  }
 
   const isDetails =
     location.pathname.includes('/detachment-planning/') && detachmentId;
   const detachment = isDetails && detachmentId ? getDetachment(detachmentId) : undefined;
+
+  return {
+    breadcrumbTrail: ['CIRRUS', isDetails && detachment ? detachment.name : 'Detachment Planning'],
+    title: isDetails && detachment ? detachment.name : 'Detachment Planning',
+    backTo: isDetails ? '/detachment-planning' : null,
+  };
+}
+
+export default function PageHeader() {
+  const navigate = useNavigate();
+  const { currentUser, previewHeaderActions } = useApp();
+  const pageMeta = usePageMeta();
+  const { breadcrumbTrail, title, backTo, isPreviewPage } = pageMeta as typeof pageMeta & {
+    isPreviewPage?: boolean;
+  };
 
   const breadcrumbItems = [
     {
@@ -22,13 +70,26 @@ export default function PageHeader() {
         </Link>
       ),
     },
-    { title: <Link to="/detachment-planning">CIRRUS</Link> },
-    {
-      title: isDetails && detachment ? detachment.name : 'Detachment Planning',
-    },
+    ...breadcrumbTrail.map((label, index) => {
+      const isLast = index === breadcrumbTrail.length - 1;
+      if (label === 'System Configurations') {
+        return {
+          title: isLast ? label : <Link to="/system-configurations">{label}</Link>,
+        };
+      }
+      if (label === 'L-series Management') {
+        return {
+          title: isLast ? label : <Link to="/system-configurations/l-series">{label}</Link>,
+        };
+      }
+      if (label === 'CIRRUS') {
+        return {
+          title: isLast ? label : <Link to="/detachment-planning">{label}</Link>,
+        };
+      }
+      return { title: label };
+    }),
   ];
-
-  const pageTitle = isDetails && detachment ? detachment.name : 'Detachment Planning';
 
   return (
     <div
@@ -66,23 +127,29 @@ export default function PageHeader() {
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          {isDetails && (
+          {backTo && (
             <Button
               type="text"
               icon={<ArrowLeftOutlined />}
-              aria-label="Back to detachment list"
-              onClick={() => navigate('/detachment-planning')}
+              aria-label="Back"
+              onClick={() => navigate(backTo)}
               style={{ padding: 0, width: 32, height: 32 }}
             />
           )}
           <Typography.Title level={3} style={{ margin: 0 }}>
-            {pageTitle}
+            {title}
           </Typography.Title>
         </div>
-        <Typography.Text type="secondary" style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-          Data last retrieved on{' '}
-          <Typography.Text strong>{DATA_SYNC_TIMESTAMP}</Typography.Text>
-        </Typography.Text>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          {isPreviewPage ? (
+            <Space size={16}>{previewHeaderActions}</Space>
+          ) : (
+            <Typography.Text type="secondary" style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+              Data last retrieved on{' '}
+              <Typography.Text strong>{DATA_SYNC_TIMESTAMP}</Typography.Text>
+            </Typography.Text>
+          )}
+        </div>
       </div>
     </div>
   );

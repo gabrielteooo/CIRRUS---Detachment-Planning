@@ -16,11 +16,12 @@ export const MOCK_PLANS: PlatformPlan[] = [
     detachmentId: 'det-001',
     platform: 'F-16',
     detachmentType: 'Long',
+    lSeriesId: 'lseries-f16-long',
     needByDate: '2026-03-01',
     variantRows: [
       {
         variant: 'D',
-        lSeriesVersion: 'L-F16-2026-TEMPLATE',
+        lSeriesVersion: 'L-F16-Long-2026',
         parameterTier: 200,
       },
     ],
@@ -38,11 +39,12 @@ export const MOCK_PLANS: PlatformPlan[] = [
     detachmentId: 'det-002',
     platform: 'CH-47',
     detachmentType: 'Short',
+    lSeriesId: 'lseries-ch47-short',
     needByDate: '2026-04-10',
     variantRows: [
       {
         variant: 'F',
-        lSeriesVersion: 'L-CH47-2026-TEMPLATE',
+        lSeriesVersion: 'L-CH47-Short-2026',
         parameterTier: 4,
       },
     ],
@@ -60,11 +62,12 @@ export const MOCK_PLANS: PlatformPlan[] = [
     detachmentId: 'det-003',
     platform: 'F-16',
     detachmentType: 'Short',
+    lSeriesId: 'lseries-f16-short',
     needByDate: '2026-05-01',
     variantRows: [
       {
-        variant: 'D+',
-        lSeriesVersion: 'L-F16-2026-TEMPLATE',
+        variant: 'DU',
+        lSeriesVersion: 'L-F16-Short-2026',
         parameterTier: 100,
       },
     ],
@@ -82,16 +85,17 @@ export const MOCK_PLANS: PlatformPlan[] = [
     detachmentId: 'det-joint',
     platform: 'F-16',
     detachmentType: 'Long Route Nav',
+    lSeriesId: 'lseries-f16-long',
     needByDate: '2026-06-01',
     variantRows: [
       {
         variant: 'D',
-        lSeriesVersion: 'L-F16-2026-TEMPLATE',
+        lSeriesVersion: 'L-F16-Long-2026',
         parameterTier: 200,
       },
       {
-        variant: 'D+',
-        lSeriesVersion: 'L-F16-2026-TEMPLATE',
+        variant: 'DU',
+        lSeriesVersion: 'L-F16-Long-2026',
         parameterTier: 300,
       },
     ],
@@ -109,16 +113,17 @@ export const MOCK_PLANS: PlatformPlan[] = [
     detachmentId: 'det-joint',
     platform: 'CH-47',
     detachmentType: 'Near Sail',
+    lSeriesId: 'lseries-ch47-long',
     needByDate: '2026-06-01',
     variantRows: [
       {
-        variant: 'D',
-        lSeriesVersion: 'L-CH47-2026-TEMPLATE',
+        variant: 'SD',
+        lSeriesVersion: 'L-CH47-Long-2026',
         parameterTier: 2,
       },
       {
         variant: 'F',
-        lSeriesVersion: 'L-CH47-2026-TEMPLATE',
+        lSeriesVersion: 'L-CH47-Long-2026',
         parameterTier: 4,
       },
     ],
@@ -136,11 +141,12 @@ export const MOCK_PLANS: PlatformPlan[] = [
     detachmentId: 'det-004',
     platform: 'F-16',
     detachmentType: 'Long',
+    lSeriesId: 'lseries-f16-long',
     needByDate: '2025-08-01',
     variantRows: [
       {
         variant: 'C',
-        lSeriesVersion: 'L-F16-2026-TEMPLATE',
+        lSeriesVersion: 'L-F16-Long-2026',
         parameterTier: 300,
       },
     ],
@@ -158,11 +164,12 @@ export const MOCK_PLANS: PlatformPlan[] = [
     detachmentId: 'det-005',
     platform: 'CH-47',
     detachmentType: 'Short',
+    lSeriesId: 'lseries-ch47-short',
     needByDate: '2025-11-01',
     variantRows: [
       {
         variant: 'F',
-        lSeriesVersion: 'L-CH47-2026-TEMPLATE',
+        lSeriesVersion: 'L-CH47-Short-2026',
         parameterTier: 2,
       },
     ],
@@ -180,11 +187,12 @@ export const MOCK_PLANS: PlatformPlan[] = [
     detachmentId: 'det-006',
     platform: 'CH-47',
     detachmentType: 'Far Sail',
+    lSeriesId: 'lseries-ch47-long',
     needByDate: '2026-06-01',
     variantRows: [
       {
-        variant: 'D',
-        lSeriesVersion: 'L-CH47-2026-TEMPLATE',
+        variant: 'SD',
+        lSeriesVersion: 'L-CH47-Long-2026',
         parameterTier: 2,
       },
     ],
@@ -202,11 +210,12 @@ export const MOCK_PLANS: PlatformPlan[] = [
     detachmentId: 'det-007',
     platform: 'F-16',
     detachmentType: 'Long',
+    lSeriesId: 'lseries-f16-long',
     needByDate: '2025-06-01',
     variantRows: [
       {
         variant: 'D',
-        lSeriesVersion: 'L-F16-2026-TEMPLATE',
+        lSeriesVersion: 'L-F16-Long-2026',
         parameterTier: 200,
       },
     ],
@@ -224,11 +233,12 @@ export const MOCK_PLANS: PlatformPlan[] = [
     detachmentId: 'det-008',
     platform: 'F-16',
     detachmentType: 'Long Route Nav',
+    lSeriesId: 'lseries-f16-long',
     needByDate: '2025-04-01',
     variantRows: [
       {
-        variant: 'D+',
-        lSeriesVersion: 'L-F16-D+-2025-A',
+        variant: 'DU',
+        lSeriesVersion: 'L-F16-Long-2026',
         parameterTier: 400,
       },
     ],
@@ -246,11 +256,12 @@ export const MOCK_PLANS: PlatformPlan[] = [
     detachmentId: 'det-009',
     platform: 'CH-47',
     detachmentType: 'Near Sail',
+    lSeriesId: 'lseries-ch47-long',
     needByDate: '2025-09-01',
     variantRows: [
       {
-        variant: 'D',
-        lSeriesVersion: 'L-CH47-2026-TEMPLATE',
+        variant: 'SD',
+        lSeriesVersion: 'L-CH47-Long-2026',
         parameterTier: 3,
       },
     ],
@@ -268,11 +279,12 @@ export const MOCK_PLANS: PlatformPlan[] = [
     detachmentId: 'det-010',
     platform: 'F-16',
     detachmentType: 'Short',
+    lSeriesId: 'lseries-f16-short',
     needByDate: '2025-02-01',
     variantRows: [
       {
         variant: 'C',
-        lSeriesVersion: 'L-F16-2026-TEMPLATE',
+        lSeriesVersion: 'L-F16-Short-2026',
         parameterTier: 100,
       },
     ],
@@ -290,11 +302,12 @@ export const MOCK_PLANS: PlatformPlan[] = [
     detachmentId: 'det-011',
     platform: 'CH-47',
     detachmentType: 'Far Sail',
+    lSeriesId: 'lseries-ch47-long',
     needByDate: '2025-07-01',
     variantRows: [
       {
         variant: 'F',
-        lSeriesVersion: 'L-CH47-2026-TEMPLATE',
+        lSeriesVersion: 'L-CH47-Long-2026',
         parameterTier: 5,
       },
     ],
@@ -312,11 +325,12 @@ export const MOCK_PLANS: PlatformPlan[] = [
     detachmentId: 'det-012',
     platform: 'F-16',
     detachmentType: 'Long',
+    lSeriesId: 'lseries-f16-long',
     needByDate: '2024-10-01',
     variantRows: [
       {
         variant: 'D',
-        lSeriesVersion: 'L-F16-2026-TEMPLATE',
+        lSeriesVersion: 'L-F16-Long-2026',
         parameterTier: 300,
       },
     ],
@@ -332,8 +346,8 @@ export const MOCK_PLANS: PlatformPlan[] = [
 ];
 
 export const PLATFORM_VARIANTS: Record<string, string[]> = {
-  'F-16': ['C', 'D', 'D+'],
-  'CH-47': ['D', 'F'],
+  'F-16': ['C', 'D', 'CU', 'DU'],
+  'CH-47': ['SD', 'F'],
 };
 
 export const L_SERIES_OPTIONS: Record<string, Record<string, string[]>> = {

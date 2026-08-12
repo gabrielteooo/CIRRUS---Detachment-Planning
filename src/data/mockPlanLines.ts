@@ -11,32 +11,32 @@ export function getDefaultPlanLines(plan: PlatformPlan): ReturnType<typeof getDe
 export const COMPONENT_PO_OPTIONS: RepairEddOption[] = [
   {
     poNumber: 'PO1234567',
-    nsn: '1560-01-234',
-    description: 'Hydraulic Pump, Utility System',
+    nsn: '1560-01-2421',
+    description: 'Hydraulic Pump',
     expectedDate: '2026-02-28',
   },
   {
     poNumber: 'PO2345678',
-    nsn: '1560-01-246',
-    description: 'Hydraulic Hose Assembly, High Pressure',
+    nsn: '7045-18-2639',
+    description: 'Hydraulic Filter Element',
     expectedDate: '2026-02-25',
   },
   {
     poNumber: 'PO3456789',
-    nsn: '1560-01-241',
-    description: 'AN/APG-68 Radar LRU (Transmitter)',
+    nsn: '1560-01-2355',
+    description: 'Radar Line-Replaceable Unit',
     expectedDate: '2026-02-20',
   },
   {
     poNumber: 'PO4567890',
-    nsn: '1560-01-232',
-    description: 'Fuel Control Unit, Main Engine',
+    nsn: '1560-01-2311',
+    description: 'Engine Fuel Pump',
     expectedDate: '2026-02-27',
   },
   {
     poNumber: 'PO9999999',
-    nsn: '1560-01-234',
-    description: 'Hydraulic Pump, Utility System (late PO)',
+    nsn: '1560-01-2421',
+    description: 'Hydraulic Pump (late PO)',
     expectedDate: '2026-03-15',
   },
 ];

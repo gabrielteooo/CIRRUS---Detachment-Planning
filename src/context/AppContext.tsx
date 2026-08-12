@@ -8,7 +8,8 @@ import {
 } from 'react';
 import { MOCK_DETACHMENTS } from '../data/mockDetachments';
 import { MOCK_PLANS } from '../data/mockPlans';
-import { getDefaultPlanLines } from '../data/mockPlanLines';
+import { MOCK_L_SERIES_RECORDS } from '../data/mockLSeriesRecords';
+import type { LSeriesMissionType, LSeriesRecord, LSeriesUploadPreview } from '../types/lSeries';
 import type {
   Detachment,
   Platform,
@@ -46,6 +47,19 @@ interface AppContextValue {
   updatePlan: (planId: string, updates: Partial<PlatformPlan>) => void;
   createDetachment: (input: CreateDetachmentInput) => Detachment;
   createPlan: (input: CreatePlanInput) => PlatformPlan;
+  lSeriesRecords: LSeriesRecord[];
+  getLSeriesRecord: (id: string) => LSeriesRecord | undefined;
+  getLSeriesByPlatformMission: (
+    platform: Platform,
+    missionType: LSeriesMissionType,
+  ) => LSeriesRecord | undefined;
+  updateLSeriesName: (id: string, name: string) => void;
+  submitLSeriesUpload: (preview: LSeriesUploadPreview) => LSeriesRecord;
+  uploadPreview: LSeriesUploadPreview | null;
+  setUploadPreview: (preview: LSeriesUploadPreview | null) => void;
+  clearUploadPreview: () => void;
+  previewHeaderActions: ReactNode | null;
+  setPreviewHeaderActions: (actions: ReactNode | null) => void;
 }
 
 export interface CreateDetachmentInput {
@@ -55,6 +69,7 @@ export interface CreateDetachmentInput {
 
 export interface CreatePlanInput {
   detachmentId: string;
+  lSeriesId: string;
   platform: Platform;
   detachmentType: DetachmentType;
   needByDate: string;
@@ -76,22 +91,27 @@ function syncPlanMetrics(plan: PlatformPlan, lines: PlanLine[]): PlatformPlan {
   };
 }
 
-function buildInitialAppState() {
+function buildInitialAppState(lSeriesRecords: LSeriesRecord[]) {
   const planLinesMap: Record<string, PlanLine[]> = {};
   for (const plan of MOCK_PLANS) {
-    planLinesMap[plan.id] = getDefaultPlanLines(plan);
+    planLinesMap[plan.id] = getDefaultPlanLinesForPlan(plan, lSeriesRecords);
   }
   const plans = MOCK_PLANS.map((plan) => syncPlanMetrics(plan, planLinesMap[plan.id]));
   return { plans, planLinesMap };
 }
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [initialState] = useState(buildInitialAppState);
+  const [lSeriesRecords, setLSeriesRecords] = useState<LSeriesRecord[]>(() =>
+    structuredClone(MOCK_L_SERIES_RECORDS),
+  );
+  const [initialState] = useState(() => buildInitialAppState(structuredClone(MOCK_L_SERIES_RECORDS)));
   const [role, setRole] = useState<UserRole>('planner');
   const [plannerPlatform, setPlannerPlatform] = useState<Platform>('F-16');
   const [detachments, setDetachments] = useState<Detachment[]>(MOCK_DETACHMENTS);
   const [plans, setPlans] = useState<PlatformPlan[]>(initialState.plans);
   const [planLinesMap, setPlanLinesMap] = useState<Record<string, PlanLine[]>>(initialState.planLinesMap);
+  const [uploadPreview, setUploadPreview] = useState<LSeriesUploadPreview | null>(null);
+  const [previewHeaderActions, setPreviewHeaderActions] = useState<ReactNode | null>(null);
 
   const currentUser = role === 'planner' ? PLANNER_USER : DIRECTOR_USER;
 
@@ -135,31 +155,103 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return newDetachment;
   }, []);
 
-  const createPlan = useCallback((input: CreatePlanInput): PlatformPlan => {
-    const id = `plan-${Date.now()}`;
-    const newPlan: PlatformPlan = {
-      id,
-      detachmentId: input.detachmentId,
-      platform: input.platform,
-      detachmentType: input.detachmentType,
-      needByDate: input.needByDate,
-      variantRows: input.variantRows,
-      status: 'Draft',
-      fillRatePercent: 0,
-      shortfallCount: 0,
-      deviationCount: 0,
-      cannibalisationCount: 0,
-      createdBy: PLANNER_USER.id,
-      createdByName: PLANNER_USER.name,
-      lastUpdated: new Date().toISOString(),
-      remarks: input.remarks,
-    };
-    const lines = getDefaultPlanLinesForPlan(newPlan);
-    const synced = syncPlanMetrics(newPlan, lines);
-    setPlans((prev) => [synced, ...prev]);
-    setPlanLinesMap((prev) => ({ ...prev, [id]: lines }));
-    return synced;
+  const getLSeriesRecord = useCallback(
+    (id: string) => lSeriesRecords.find((record) => record.id === id),
+    [lSeriesRecords],
+  );
+
+  const getLSeriesByPlatformMission = useCallback(
+    (platform: Platform, missionType: LSeriesMissionType) =>
+      lSeriesRecords.find(
+        (record) => record.platform === platform && record.missionType === missionType,
+      ),
+    [lSeriesRecords],
+  );
+
+  const updateLSeriesName = useCallback((id: string, name: string) => {
+    setLSeriesRecords((prev) =>
+      prev.map((record) => (record.id === id ? { ...record, name } : record)),
+    );
+    setPlans((prev) =>
+      prev.map((plan) =>
+        plan.lSeriesId === id
+          ? {
+              ...plan,
+              variantRows: plan.variantRows.map((row) => ({ ...row, lSeriesVersion: name })),
+            }
+          : plan,
+      ),
+    );
   }, []);
+
+  const submitLSeriesUpload = useCallback(
+    (preview: LSeriesUploadPreview): LSeriesRecord => {
+      const now = new Date().toISOString();
+      const uploadedBy = role === 'director' ? DIRECTOR_USER : PLANNER_USER;
+      const existing = preview.replacingRecordId
+        ? lSeriesRecords.find((record) => record.id === preview.replacingRecordId)
+        : undefined;
+
+      const stableId = `lseries-${preview.platform.toLowerCase().replace('-', '')}-${preview.missionType.toLowerCase()}`;
+      const record: LSeriesRecord = {
+        id: existing?.id ?? stableId,
+        name: preview.name,
+        platform: preview.platform,
+        missionType: preview.missionType,
+        version: preview.nextVersion,
+        uploadedAt: now,
+        uploadedBy: uploadedBy.id,
+        uploadedByName: uploadedBy.name,
+        template: preview.template,
+      };
+
+      setLSeriesRecords((prev) => {
+        if (existing) {
+          return prev.map((item) => (item.id === existing.id ? record : item));
+        }
+        return [...prev, record];
+      });
+
+      return record;
+    },
+    [lSeriesRecords, role],
+  );
+
+  const clearUploadPreview = useCallback(() => setUploadPreview(null), []);
+
+  const createPlan = useCallback(
+    (input: CreatePlanInput): PlatformPlan => {
+      const id = `plan-${Date.now()}`;
+      const lSeries = lSeriesRecords.find((record) => record.id === input.lSeriesId);
+      const lSeriesVersion = lSeries?.name ?? input.variantRows[0]?.lSeriesVersion ?? '';
+      const variantRows = input.variantRows.map((row) => ({ ...row, lSeriesVersion }));
+
+      const newPlan: PlatformPlan = {
+        id,
+        detachmentId: input.detachmentId,
+        platform: input.platform,
+        detachmentType: input.detachmentType,
+        lSeriesId: input.lSeriesId,
+        needByDate: input.needByDate,
+        variantRows,
+        status: 'Draft',
+        fillRatePercent: 0,
+        shortfallCount: 0,
+        deviationCount: 0,
+        cannibalisationCount: 0,
+        createdBy: PLANNER_USER.id,
+        createdByName: PLANNER_USER.name,
+        lastUpdated: new Date().toISOString(),
+        remarks: input.remarks,
+      };
+      const lines = getDefaultPlanLinesForPlan(newPlan, lSeriesRecords);
+      const synced = syncPlanMetrics(newPlan, lines);
+      setPlans((prev) => [synced, ...prev]);
+      setPlanLinesMap((prev) => ({ ...prev, [id]: lines }));
+      return synced;
+    },
+    [lSeriesRecords],
+  );
 
   const value = useMemo(
     () => ({
@@ -177,6 +269,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
       updatePlan,
       createDetachment,
       createPlan,
+      lSeriesRecords,
+      getLSeriesRecord,
+      getLSeriesByPlatformMission,
+      updateLSeriesName,
+      submitLSeriesUpload,
+      uploadPreview,
+      setUploadPreview,
+      clearUploadPreview,
+      previewHeaderActions,
+      setPreviewHeaderActions,
     }),
     [
       role,
@@ -191,6 +293,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
       updatePlan,
       createDetachment,
       createPlan,
+      lSeriesRecords,
+      getLSeriesRecord,
+      getLSeriesByPlatformMission,
+      updateLSeriesName,
+      submitLSeriesUpload,
+      uploadPreview,
+      clearUploadPreview,
+      previewHeaderActions,
     ],
   );
 

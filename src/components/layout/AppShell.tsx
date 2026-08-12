@@ -33,6 +33,12 @@ export default function AppShell() {
   const { token } = theme.useToken();
 
   const isDetachmentPlanning = location.pathname.startsWith('/detachment-planning');
+  const isSystemConfig = location.pathname.startsWith('/system-configurations');
+
+  const selectedKeys = [
+    ...(isDetachmentPlanning ? ['detachment-planning'] : []),
+    ...(isSystemConfig ? ['system-config'] : []),
+  ];
 
   const cirrusChildren = CIRRUS_ITEMS.map((item) => ({
     key: item.key,
@@ -49,6 +55,7 @@ export default function AppShell() {
       key: 'home',
       icon: <HomeOutlined />,
       label: 'Home',
+      onClick: () => navigate('/detachment-planning'),
     },
     {
       key: 'cirrus',
@@ -65,6 +72,7 @@ export default function AppShell() {
       key: 'system-config',
       icon: <SettingOutlined />,
       label: 'System Configurations',
+      onClick: () => navigate('/system-configurations'),
     },
   ];
 
@@ -122,7 +130,7 @@ export default function AppShell() {
           theme="dark"
           mode="inline"
           inlineCollapsed={collapsed}
-          selectedKeys={isDetachmentPlanning ? ['detachment-planning'] : []}
+          selectedKeys={selectedKeys}
           openKeys={collapsed ? [] : cirrusOpen ? ['cirrus'] : []}
           onOpenChange={(keys) => {
             if (!collapsed) {
