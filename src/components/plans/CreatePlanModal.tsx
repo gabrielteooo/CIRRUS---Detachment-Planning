@@ -180,7 +180,7 @@ export default function CreatePlanModal({
         </Row>
 
         <Row gutter={16}>
-          <Col span={24}>
+          <Col span={12}>
             <Form.Item
               name="lSeriesId"
               label="L-series"
@@ -206,26 +206,6 @@ export default function CreatePlanModal({
               />
             </Form.Item>
           </Col>
-        </Row>
-
-        <Row gutter={16}>
-          <Col span={12}>
-            <Form.Item label="Platform">
-              <Input readOnly value={selectedLSeries?.platform ?? ''} placeholder="Select L-series" />
-            </Form.Item>
-          </Col>
-          <Col span={12}>
-            <Form.Item label="Mission type">
-              <Input
-                readOnly
-                value={selectedLSeries?.missionType ?? ''}
-                placeholder="Select L-series"
-              />
-            </Form.Item>
-          </Col>
-        </Row>
-
-        <Row gutter={16}>
           <Col span={12}>
             <Form.Item
               name="needByDate"
@@ -233,17 +213,6 @@ export default function CreatePlanModal({
               rules={[{ required: true, message: 'Select need-by-date' }]}
             >
               <DatePicker style={{ width: '100%' }} format="D MMM YYYY" />
-            </Form.Item>
-          </Col>
-          <Col span={12}>
-            <Form.Item label="L-series version">
-              <Input
-                readOnly
-                value={
-                  selectedLSeries ? `${selectedLSeries.name} (v${selectedLSeries.version})` : ''
-                }
-                placeholder="Select L-series"
-              />
             </Form.Item>
           </Col>
         </Row>
