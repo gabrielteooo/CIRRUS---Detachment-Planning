@@ -208,6 +208,47 @@ body {
   color: rgba(0, 0, 0, 0.88);
 }
 
+.kpi-insight-card .ant-card-body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.kpi-insight-link {
+  padding: 0;
+  height: auto;
+  margin-top: 8px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.kpi-insight-modal .ant-modal-body {
+  padding-top: 12px;
+}
+
+.kpi-insight-modal .ant-table-wrapper {
+  margin-top: 4px;
+  border: 1px solid #f0f0f0;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.kpi-insight-modal .ant-table {
+  border-radius: 8px;
+}
+
+.kpi-insight-modal .ant-table-container {
+  border-radius: 8px;
+}
+
+.kpi-insight-modal .ant-table-thead > tr > th:first-child {
+  border-top-left-radius: 8px;
+}
+
+.kpi-insight-modal .ant-table-thead > tr > th:last-child {
+  border-top-right-radius: 8px;
+}
+
 .kpi-resolution-card:hover {
   border-color: #00636a;
 }
@@ -932,6 +973,44 @@ body {
   gap: 8px;
   flex-shrink: 0;
   padding-top: 2px;
+}
+
+.shortfall-action-entry-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.shortfall-action-entry-row .ant-form-item {
+  margin-bottom: 0;
+}
+
+.shortfall-action-entry-qty {
+  width: 88px;
+  flex-shrink: 0;
+}
+
+.shortfall-action-entry-qty .ant-input-number {
+  width: 100%;
+}
+
+.shortfall-action-entry-edd {
+  flex: 1;
+  min-width: 0;
+}
+
+.shortfall-action-entry-edd .ant-picker {
+  width: 100%;
+}
+
+.shortfall-action-entry-tail {
+  flex: 1;
+  min-width: 0;
+}
+
+.shortfall-action-add-entry {
+  margin-bottom: 12px;
 }
 
 .shortfall-action-card {

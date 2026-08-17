@@ -300,6 +300,7 @@ export function applyDemoScenario(planId: string, lines: PlanLine[]): PlanLine[]
     shortfallActions: [
       { type: 'wait', qty: 1, needByDate: '2026-03-01', remarks: 'Expedite repair — PO1234567 expected end Feb', approved: false },
       { type: 'cannibalise', qty: 1, tailNumber: '987', workCentreComments: 'Confirmed with Hangar 3 MRO', confirmedWithWorkCentre: true, approved: false },
+      { type: 'cannibalise', qty: 1, tailNumber: '654', workCentreComments: 'Secondary source aircraft', confirmedWithWorkCentre: true, approved: false },
     ],
   });
 

@@ -12,14 +12,17 @@ import {
   message,
   DatePicker,
 } from 'antd';
+import { MinusCircleOutlined, PlusOutlined } from '@ant-design/icons';
 import dayjs, { type Dayjs } from 'dayjs';
 import { formatAircraftTailNumber, isValidAircraftTailNumber } from '../../utils/tailNumber';
 import { useEffect, type ReactNode } from 'react';
 import type {
+  CannibaliseShortfallAction,
   LineStatus,
   PlanLine,
   ShortfallAction,
   ShortfallActionType,
+  WaitShortfallAction,
 } from '../../types/planLine';
 import {
   formatLineStatus,
@@ -39,6 +42,81 @@ interface EditLineDrawerProps {
 }
 
 type LineMode = 'shortfall' | 'deviation';
+
+interface WaitEntryFormValue {
+  qty: number;
+  edd: Dayjs;
+}
+
+interface CannibaliseEntryFormValue {
+  qty: number;
+  tail: string;
+}
+
+function buildShortfallActionsFromForm(
+  line: PlanLine,
+  values: {
+    shortfallActionTypes?: ShortfallActionType[];
+    shortfallTargetNsn?: string;
+    acceptQty?: number;
+    acceptRemarks?: string;
+    waitEntries?: WaitEntryFormValue[];
+    waitRemarks?: string;
+    cannibaliseEntries?: CannibaliseEntryFormValue[];
+    cannComments?: string;
+  },
+  planNeedByDate: string,
+): ShortfallAction[] {
+  const actionTypes = values.shortfallActionTypes ?? [];
+  const shortfallTargetNsn = values.shortfallTargetNsn;
+  const actions: ShortfallAction[] = [];
+
+  if (actionTypes.includes('accept')) {
+    const existing = line.shortfallActions.find((a) => a.type === 'accept');
+    actions.push({
+      type: 'accept',
+      qty: values.acceptQty ?? 1,
+      remarks: values.acceptRemarks ?? '',
+      approved: existing?.approved ?? false,
+      targetNsn: shortfallTargetNsn,
+    });
+  }
+
+  if (actionTypes.includes('wait')) {
+    const existingWait = line.shortfallActions.filter(
+      (a): a is WaitShortfallAction => a.type === 'wait',
+    );
+    for (const [index, entry] of (values.waitEntries ?? []).entries()) {
+      actions.push({
+        type: 'wait',
+        qty: entry.qty ?? 1,
+        remarks: values.waitRemarks ?? '',
+        needByDate: entry.edd?.format('YYYY-MM-DD') ?? planNeedByDate,
+        approved: existingWait[index]?.approved ?? false,
+        targetNsn: shortfallTargetNsn,
+      });
+    }
+  }
+
+  if (actionTypes.includes('cannibalise')) {
+    const existingCann = line.shortfallActions.filter(
+      (a): a is CannibaliseShortfallAction => a.type === 'cannibalise',
+    );
+    for (const [index, entry] of (values.cannibaliseEntries ?? []).entries()) {
+      actions.push({
+        type: 'cannibalise',
+        qty: entry.qty ?? 1,
+        tailNumber: formatAircraftTailNumber(entry.tail ?? ''),
+        workCentreComments: values.cannComments ?? '',
+        confirmedWithWorkCentre: true,
+        approved: existingCann[index]?.approved ?? false,
+        targetNsn: shortfallTargetNsn,
+      });
+    }
+  }
+
+  return actions;
+}
 
 const STATUS_TAG_COLORS: Record<LineStatus, string> = {
   Met: 'success',
@@ -69,7 +147,7 @@ function ShortfallActionQtyField({
   shortfallQty,
 }: {
   actionType: ShortfallActionType;
-  fieldName: 'acceptQty' | 'waitQty' | 'cannQty';
+  fieldName: 'acceptQty';
   selectedActions: ShortfallActionType[];
   shortfallQty: number;
 }) {
@@ -113,8 +191,10 @@ export default function EditLineDrawer({
   const [form] = Form.useForm();
   const toBringQty = Form.useWatch('toBringQty', form);
   const acceptQty = Form.useWatch('acceptQty', form);
-  const waitQty = Form.useWatch('waitQty', form);
-  const cannQty = Form.useWatch('cannQty', form);
+  const waitEntries = Form.useWatch('waitEntries', form) as WaitEntryFormValue[] | undefined;
+  const cannibaliseEntries = Form.useWatch('cannibaliseEntries', form) as
+    | CannibaliseEntryFormValue[]
+    | undefined;
   const shortfallActionTypes = Form.useWatch('shortfallActionTypes', form) as
     | ShortfallActionType[]
     | undefined;
@@ -122,8 +202,12 @@ export default function EditLineDrawer({
   useEffect(() => {
     if (line && open) {
       const acceptAction = line.shortfallActions.find((a) => a.type === 'accept');
-      const waitAction = line.shortfallActions.find((a) => a.type === 'wait');
-      const cannAction = line.shortfallActions.find((a) => a.type === 'cannibalise');
+      const waitActions = line.shortfallActions.filter(
+        (a): a is WaitShortfallAction => a.type === 'wait',
+      );
+      const cannActions = line.shortfallActions.filter(
+        (a): a is CannibaliseShortfallAction => a.type === 'cannibalise',
+      );
       const defaultQty = getShortfallQty(line) || 1;
 
       const groupAvail = getGroupAvailableQty(line);
@@ -136,26 +220,30 @@ export default function EditLineDrawer({
         toBringQty: defaultToBring,
         deviationReason: line.deviationReason,
         shortfallTargetNsn:
-          waitAction?.targetNsn ??
+          waitActions[0]?.targetNsn ??
           acceptAction?.targetNsn ??
-          cannAction?.targetNsn ??
+          cannActions[0]?.targetNsn ??
           line.shortfallTargetNsn ??
           getPrimaryMemberNsn(line),
-        shortfallActionTypes: line.shortfallActions.map((a) => a.type),
+        shortfallActionTypes: [...new Set(line.shortfallActions.map((a) => a.type))],
         acceptQty: acceptAction?.qty ?? defaultQty,
         acceptRemarks: acceptAction?.type === 'accept' ? acceptAction.remarks : '',
-        waitQty: waitAction?.qty ?? defaultQty,
-        waitEdd: dayjs(
-          waitAction?.type === 'wait' ? waitAction.needByDate : planNeedByDate,
-          'YYYY-MM-DD',
-        ),
-        waitRemarks: waitAction?.type === 'wait' ? waitAction.remarks : '',
-        cannQty: cannAction?.qty ?? defaultQty,
-        cannTail:
-          cannAction?.type === 'cannibalise'
-            ? formatAircraftTailNumber(cannAction.tailNumber)
-            : '',
-        cannComments: cannAction?.type === 'cannibalise' ? cannAction.workCentreComments : '',
+        waitEntries:
+          waitActions.length > 0
+            ? waitActions.map((action) => ({
+                qty: action.qty,
+                edd: dayjs(action.needByDate, 'YYYY-MM-DD'),
+              }))
+            : [{ qty: defaultQty, edd: dayjs(planNeedByDate, 'YYYY-MM-DD') }],
+        waitRemarks: waitActions[0]?.remarks ?? '',
+        cannibaliseEntries:
+          cannActions.length > 0
+            ? cannActions.map((action) => ({
+                qty: action.qty,
+                tail: formatAircraftTailNumber(action.tailNumber),
+              }))
+            : [{ qty: defaultQty, tail: '' }],
+        cannComments: cannActions[0]?.workCentreComments ?? '',
       });
     }
   }, [line, open, form, planNeedByDate]);
@@ -169,11 +257,16 @@ export default function EditLineDrawer({
     const actionTypes = shortfallActionTypes ?? [];
     const derivedToBring = computeToBringQty(
       line,
-      actionTypes.map((type) => {
-        if (type === 'accept') return { type, qty: acceptQty ?? 0 } as ShortfallAction;
-        if (type === 'wait') return { type, qty: waitQty ?? 0 } as ShortfallAction;
-        return { type: 'cannibalise', qty: cannQty ?? 0 } as ShortfallAction;
-      }),
+      buildShortfallActionsFromForm(
+        line,
+        {
+          shortfallActionTypes: actionTypes,
+          acceptQty,
+          waitEntries,
+          cannibaliseEntries,
+        },
+        planNeedByDate,
+      ),
     );
 
     if (derivedToBring !== toBringQty) {
@@ -185,10 +278,11 @@ export default function EditLineDrawer({
     lineMode,
     shortfallActionTypes,
     acceptQty,
-    waitQty,
-    cannQty,
+    waitEntries,
+    cannibaliseEntries,
     toBringQty,
     form,
+    planNeedByDate,
   ]);
 
   if (!line) return null;
@@ -220,45 +314,36 @@ export default function EditLineDrawer({
       const values = await form.validateFields();
       const actionTypes: ShortfallActionType[] = values.shortfallActionTypes ?? [];
       const shortfallTargetNsn = values.shortfallTargetNsn as string | undefined;
+      const mode = resolveLineMode(line, values.toBringQty ?? line.toBringQty);
+
+      if (mode === 'shortfall') {
+        if (actionTypes.includes('wait') && (values.waitEntries?.length ?? 0) === 0) {
+          message.error('Add at least one order for awaiting supply');
+          return;
+        }
+
+        if (actionTypes.includes('cannibalise') && (values.cannibaliseEntries?.length ?? 0) === 0) {
+          message.error('Add at least one aircraft for cannibalise');
+          return;
+        }
+
+        for (const entry of values.waitEntries ?? []) {
+          if (!entry?.edd) {
+            message.error('Each awaiting supply entry requires an EDD');
+            return;
+          }
+        }
+
+        for (const entry of values.cannibaliseEntries ?? []) {
+          if (!isValidAircraftTailNumber(entry?.tail ?? '')) {
+            message.error('Each cannibalise entry requires a 3–4 digit aircraft tail number');
+            return;
+          }
+        }
+      }
 
       const shortfallActions: ShortfallAction[] =
-        resolveLineMode(line, values.toBringQty ?? line.toBringQty) === 'shortfall'
-          ? actionTypes.map((type) => {
-              const existing = line.shortfallActions.find((a) => a.type === type);
-
-              if (type === 'accept') {
-                return {
-                  type: 'accept',
-                  qty: values.acceptQty ?? 1,
-                  remarks: values.acceptRemarks ?? '',
-                  approved: existing?.approved ?? false,
-                  targetNsn: shortfallTargetNsn,
-                };
-              }
-              if (type === 'wait') {
-                const waitEdd = values.waitEdd as Dayjs | undefined;
-                return {
-                  type: 'wait',
-                  qty: values.waitQty ?? 1,
-                  remarks: values.waitRemarks ?? '',
-                  needByDate: waitEdd?.format('YYYY-MM-DD') ?? planNeedByDate,
-                  approved: existing?.approved ?? false,
-                  targetNsn: shortfallTargetNsn,
-                };
-              }
-              return {
-                type: 'cannibalise',
-                qty: values.cannQty ?? 1,
-                tailNumber: formatAircraftTailNumber(values.cannTail ?? ''),
-                workCentreComments: values.cannComments ?? '',
-                confirmedWithWorkCentre: true,
-                approved: existing?.approved ?? false,
-                targetNsn: shortfallTargetNsn,
-              };
-            })
-          : [];
-
-      const mode = resolveLineMode(line, values.toBringQty ?? line.toBringQty);
+        mode === 'shortfall' ? buildShortfallActionsFromForm(line, values, planNeedByDate) : [];
 
       const nextToBringQty =
         mode === 'shortfall'
@@ -267,20 +352,6 @@ export default function EditLineDrawer({
 
       if (mode !== 'shortfall' && nextToBringQty > groupAvailable) {
         message.error(`To-bring cannot exceed available qty (${groupAvailable})`);
-        return;
-      }
-
-      if (
-        mode === 'shortfall' &&
-        actionTypes.includes('cannibalise') &&
-        !isValidAircraftTailNumber(values.cannTail ?? '')
-      ) {
-        message.error('Cannibalise requires a 3–4 digit aircraft tail number');
-        return;
-      }
-
-      if (mode === 'shortfall' && actionTypes.includes('wait') && !values.waitEdd) {
-        message.error('Wait resolution requires an EDD');
         return;
       }
 
@@ -476,27 +547,64 @@ export default function EditLineDrawer({
                   >
                     <div className="shortfall-action-row">
                       <div className="shortfall-action-row-main">
-                        <Checkbox value="wait">Wait</Checkbox>
+                        <Checkbox value="wait">Awaiting supply</Checkbox>
                         <Typography.Text type="secondary" className="shortfall-action-description">
-                          Expedite repair/new buys
+                          Expedite repair or new buys from one or more orders
                         </Typography.Text>
                       </div>
-                      <ShortfallActionQtyField
-                        actionType="wait"
-                        fieldName="waitQty"
-                        selectedActions={selectedActions}
-                        shortfallQty={shortfallQty}
-                      />
                     </div>
                     {selectedActions.includes('wait') && (
                       <ActionDetailFields>
-                        <Form.Item
-                          name="waitEdd"
-                          label="EDD"
-                          rules={[{ required: true, message: 'Select expected delivery date' }]}
-                        >
-                          <DatePicker style={{ width: '100%' }} format="D MMM YYYY" />
-                        </Form.Item>
+                        <Form.List name="waitEntries">
+                          {(fields, { add, remove }) => (
+                            <>
+                              {fields.map((field) => (
+                                <div key={field.key} className="shortfall-action-entry-row">
+                                  <Form.Item
+                                    name={[field.name, 'qty']}
+                                    rules={[{ required: true, message: 'Qty' }]}
+                                    className="shortfall-action-entry-qty"
+                                  >
+                                    <InputNumber
+                                      min={1}
+                                      max={shortfallQty || undefined}
+                                      placeholder="Qty"
+                                    />
+                                  </Form.Item>
+                                  <Form.Item
+                                    name={[field.name, 'edd']}
+                                    rules={[{ required: true, message: 'EDD' }]}
+                                    className="shortfall-action-entry-edd"
+                                  >
+                                    <DatePicker format="D MMM YYYY" placeholder="EDD" />
+                                  </Form.Item>
+                                  {fields.length > 1 && (
+                                    <Button
+                                      type="text"
+                                      icon={<MinusCircleOutlined />}
+                                      aria-label="Remove order"
+                                      onClick={() => remove(field.name)}
+                                    />
+                                  )}
+                                </div>
+                              ))}
+                              <Button
+                                type="dashed"
+                                icon={<PlusOutlined />}
+                                onClick={() =>
+                                  add({
+                                    qty: 1,
+                                    edd: dayjs(planNeedByDate, 'YYYY-MM-DD'),
+                                  })
+                                }
+                                block
+                                className="shortfall-action-add-entry"
+                              >
+                                Add order
+                              </Button>
+                            </>
+                          )}
+                        </Form.List>
                         <Form.Item name="waitRemarks" label="Remarks">
                           <Input.TextArea rows={2} placeholder="Optional remarks" />
                         </Form.Item>
@@ -512,29 +620,70 @@ export default function EditLineDrawer({
                     }`}
                   >
                     <div className="shortfall-action-row">
-                      <Checkbox value="cannibalise">Cannibalise</Checkbox>
-                      <ShortfallActionQtyField
-                        actionType="cannibalise"
-                        fieldName="cannQty"
-                        selectedActions={selectedActions}
-                        shortfallQty={shortfallQty}
-                      />
+                      <div className="shortfall-action-row-main">
+                        <Checkbox value="cannibalise">Cannibalise</Checkbox>
+                        <Typography.Text type="secondary" className="shortfall-action-description">
+                          Take from one or more aircraft for critical spares
+                        </Typography.Text>
+                      </div>
                     </div>
                     {selectedActions.includes('cannibalise') && (
                       <ActionDetailFields>
-                        <Form.Item
-                          name="cannTail"
-                          label="Aircraft tail #"
-                          rules={[
-                            { required: true, message: 'Enter tail #' },
-                            {
-                              pattern: /^\d{3,4}$/,
-                              message: 'Enter a 3–4 digit tail number',
-                            },
-                          ]}
-                        >
-                          <Input placeholder="e.g. 987" maxLength={4} inputMode="numeric" />
-                        </Form.Item>
+                        <Form.List name="cannibaliseEntries">
+                          {(fields, { add, remove }) => (
+                            <>
+                              {fields.map((field) => (
+                                <div key={field.key} className="shortfall-action-entry-row">
+                                  <Form.Item
+                                    name={[field.name, 'qty']}
+                                    rules={[{ required: true, message: 'Qty' }]}
+                                    className="shortfall-action-entry-qty"
+                                  >
+                                    <InputNumber
+                                      min={1}
+                                      max={shortfallQty || undefined}
+                                      placeholder="Qty"
+                                    />
+                                  </Form.Item>
+                                  <Form.Item
+                                    name={[field.name, 'tail']}
+                                    rules={[
+                                      { required: true, message: 'Tail #' },
+                                      {
+                                        pattern: /^\d{3,4}$/,
+                                        message: '3–4 digits',
+                                      },
+                                    ]}
+                                    className="shortfall-action-entry-tail"
+                                  >
+                                    <Input
+                                      placeholder="Tail #"
+                                      maxLength={4}
+                                      inputMode="numeric"
+                                    />
+                                  </Form.Item>
+                                  {fields.length > 1 && (
+                                    <Button
+                                      type="text"
+                                      icon={<MinusCircleOutlined />}
+                                      aria-label="Remove aircraft"
+                                      onClick={() => remove(field.name)}
+                                    />
+                                  )}
+                                </div>
+                              ))}
+                              <Button
+                                type="dashed"
+                                icon={<PlusOutlined />}
+                                onClick={() => add({ qty: 1, tail: '' })}
+                                block
+                                className="shortfall-action-add-entry"
+                              >
+                                Add aircraft
+                              </Button>
+                            </>
+                          )}
+                        </Form.List>
                         <Form.Item name="cannComments" label="Remarks">
                           <Input.TextArea rows={2} />
                         </Form.Item>

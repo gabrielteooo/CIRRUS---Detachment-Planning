@@ -384,16 +384,22 @@ export function computeToBringFromShortfallActions(actions: ShortfallAction[]): 
 export function formatShortfallActions(actions: ShortfallAction[]): string {
   const labels: Record<ShortfallActionType, string> = {
     accept: 'Accept shortfall',
-    wait: 'Wait',
+    wait: 'Awaiting supply',
     cannibalise: 'Cannibalise',
   };
   return (
     actions
       .map((a) => {
         const suffix = a.targetNsn ? ` — ${a.targetNsn}` : '';
+        if (a.type === 'wait') {
+          return `${labels[a.type]} (${a.qty}, EDD ${a.needByDate})${suffix}`;
+        }
+        if (a.type === 'cannibalise') {
+          return `${labels[a.type]} (${a.qty}, tail ${a.tailNumber})${suffix}`;
+        }
         return `${labels[a.type]} (${a.qty})${suffix}`;
       })
-      .join(', ') || '—'
+      .join('; ') || '—'
   );
 }
 
