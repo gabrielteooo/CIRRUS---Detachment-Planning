@@ -1,20 +1,30 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Badge, Button, Input, Popconfirm, Select, Space, Table, Tabs, Tag, Typography } from 'antd';
+import { Button, Card, Input, Popconfirm, Select, Space, Table, Tag, Typography } from 'antd';
 import { PlusOutlined, SearchOutlined } from '@ant-design/icons';
 import type { PlanLine, ComponentCategory } from '../../types/planLine';
-import { formatLineStatus, getLineActionLabel, getLineStatus } from '../../types/planLine';
+import {
+  formatLineStatus,
+  getCategoryFulfillmentSummary,
+  getLineActionLabel,
+  getLineStatus,
+} from '../../types/planLine';
 import type { Platform } from '../../types/detachment';
 import { COMPONENT_CATEGORIES } from '../../data/lSeriesTemplate';
 import {
   getOperationalComponentColumns,
   getPolReferenceColumns,
+  getPolFulfilledColumn,
+  getPolActionColumn,
+  computeOperationalTableScrollX,
+  computePolTableScrollX,
   ACTION_COLUMN_WIDTH,
   STATUS_COLUMN_WIDTH,
   DETACHMENT_TABLE_LAYOUT,
-  LRU_OPERATIONAL_TABLE_SCROLL_X,
-  CONSUMABLE_OPERATIONAL_TABLE_SCROLL_X,
-  POL_REFERENCE_TABLE_SCROLL_X,
 } from './nsnTableColumns';
+import CustomizeColumnsButton, {
+  DEFAULT_COMPONENT_COLUMN_VISIBILITY,
+  type ComponentColumnVisibility,
+} from './CustomizeColumnsButton';
 
 interface LSeriesTableProps {
   lines: PlanLine[];
@@ -26,6 +36,7 @@ interface LSeriesTableProps {
   onViewNsn: (line: PlanLine) => void;
   onAddNsn?: () => void;
   onDeleteLine?: (line: PlanLine) => void;
+  onPolFulfilledChange?: (line: PlanLine, fulfilled: boolean) => void;
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -34,9 +45,9 @@ const STATUS_COLORS: Record<string, string> = {
   Shortfall: 'error',
 };
 
-const CATEGORY_LABELS: Record<ComponentCategory, string> = {
+const CATEGORY_CARD_LABELS: Record<ComponentCategory, string> = {
   LRU: 'LRU',
-  Consumable: 'Consumable',
+  Consumable: 'Consumables',
   POL: 'POL',
 };
 
@@ -61,11 +72,15 @@ export default function LSeriesTable({
   onViewNsn,
   onAddNsn,
   onDeleteLine,
+  onPolFulfilledChange,
 }: LSeriesTableProps) {
   const [activeCategory, setActiveCategory] = useState<ComponentCategory>('LRU');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [page, setPage] = useState(1);
+  const [columnVisibility, setColumnVisibility] = useState<ComponentColumnVisibility>(
+    DEFAULT_COMPONENT_COLUMN_VISIBILITY,
+  );
   const addedCount = lines.filter((line) => line.isAddedNsn).length;
   const isPolTab = activeCategory === 'POL';
 
@@ -81,45 +96,23 @@ export default function LSeriesTable({
 
   const sortedLines = useMemo(() => sortLinesForDisplay(lines), [lines]);
 
-  const categoryCounts = useMemo(
-    () =>
-      COMPONENT_CATEGORIES.reduce(
-        (counts, category) => {
-          counts[category] = sortedLines.filter((line) => lineMatchesCategory(line, category)).length;
-          return counts;
-        },
-        {} as Record<ComponentCategory, number>,
-      ),
-    [sortedLines],
-  );
-
-  const isLruTab = activeCategory === 'LRU';
+  const searchFilteredLines = useMemo(() => {
+    if (!search.trim()) return sortedLines;
+    const q = search.toLowerCase();
+    return sortedLines.filter(
+      (line) =>
+        line.nsn.toLowerCase().includes(q) ||
+        line.description.toLowerCase().includes(q),
+    );
+  }, [sortedLines, search]);
 
   const filtered = useMemo(() => {
-    let result = sortedLines.filter((line) => lineMatchesCategory(line, activeCategory));
+    let result = searchFilteredLines.filter((line) => lineMatchesCategory(line, activeCategory));
     if (!isPolTab && statusFilter !== 'all') {
-      result = result.filter((l) => getLineStatus(l) === statusFilter);
-    }
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      result = result.filter(
-        (l) =>
-          l.nsn.toLowerCase().includes(q) ||
-          l.description.toLowerCase().includes(q),
-      );
+      result = result.filter((line) => getLineStatus(line) === statusFilter);
     }
     return result;
-  }, [sortedLines, activeCategory, search, statusFilter, isPolTab]);
-
-  const operationalColumns = !isPolTab
-      ? getOperationalComponentColumns(
-          activeCategory as Extract<ComponentCategory, 'LRU' | 'Consumable'>,
-          platform,
-          variant,
-          onViewNsn,
-          onViewInventory,
-        )
-      : [];
+  }, [searchFilteredLines, activeCategory, statusFilter, isPolTab]);
 
   const statusAndActionColumns = [
     {
@@ -164,21 +157,94 @@ export default function LSeriesTable({
     },
   ];
 
+  const activeColumnVisibility = columnVisibility[activeCategory];
+
+  const handleColumnToggle = (key: string, visible: boolean) => {
+    setColumnVisibility((current) => ({
+      ...current,
+      [activeCategory]: {
+        ...current[activeCategory],
+        [key]: visible,
+      },
+    }));
+  };
+
+  const operationalColumns = !isPolTab
+    ? getOperationalComponentColumns(
+        activeCategory as Extract<ComponentCategory, 'LRU' | 'Consumable'>,
+        platform,
+        variant,
+        onViewNsn,
+        onViewInventory,
+        activeColumnVisibility,
+      )
+    : [];
+
   const columns = isPolTab
-    ? getPolReferenceColumns<PlanLine>(platform, variant)
+    ? [
+        ...getPolReferenceColumns<PlanLine>(platform, variant, activeColumnVisibility),
+        ...(onPolFulfilledChange
+          ? [getPolFulfilledColumn(viewOnly, onPolFulfilledChange)]
+          : []),
+        getPolActionColumn(viewOnly, onEditLine),
+      ]
     : [...operationalColumns, ...statusAndActionColumns];
 
   const tableScrollX = isPolTab
-    ? POL_REFERENCE_TABLE_SCROLL_X
-    : isLruTab
-      ? LRU_OPERATIONAL_TABLE_SCROLL_X
-      : CONSUMABLE_OPERATIONAL_TABLE_SCROLL_X;
+    ? computePolTableScrollX(activeColumnVisibility, {
+        includeFulfilled: !!onPolFulfilledChange,
+        includeAction: !viewOnly,
+      })
+    : computeOperationalTableScrollX(
+        activeCategory as Extract<ComponentCategory, 'LRU' | 'Consumable'>,
+        activeColumnVisibility,
+      );
 
   const pageSize = isPolTab ? Math.max(5, filtered.length) : 10;
 
-  const tableContent = (
-    <>
-      <div style={{ display: 'flex', gap: 12, marginTop: 12, marginBottom: 12 }}>
+  return (
+    <div className="lseries-section">
+      <div className="lseries-section-header">
+        <Typography.Title
+          level={5}
+          className="lseries-section-title"
+          style={{ marginTop: 0, marginBottom: 0, color: '#000000', fontWeight: 600 }}
+        >
+          Detachment Components
+        </Typography.Title>
+        {!viewOnly && onAddNsn && (
+          <Button type="primary" icon={<PlusOutlined />} onClick={onAddNsn}>
+            Add NSN
+          </Button>
+        )}
+      </div>
+
+      <div className="lseries-category-cards" role="tablist" aria-label="Component categories">
+        {COMPONENT_CATEGORIES.map((category) => {
+          const summary = getCategoryFulfillmentSummary(sortedLines, category);
+          const selected = activeCategory === category;
+
+          return (
+            <button
+              key={category}
+              type="button"
+              role="tab"
+              aria-selected={selected}
+              className={`lseries-category-card${selected ? ' lseries-category-card--selected' : ''}`}
+              onClick={() => setActiveCategory(category)}
+            >
+              <Typography.Text className="lseries-category-card-title">
+                {CATEGORY_CARD_LABELS[category]}
+              </Typography.Text>
+              <Typography.Text className="lseries-category-card-rate">
+                {summary.percent}%
+              </Typography.Text>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="lseries-table-toolbar">
         <Input
           placeholder="Search components"
           prefix={<SearchOutlined />}
@@ -200,65 +266,31 @@ export default function LSeriesTable({
             ]}
           />
         )}
-      </div>
-      <div className="detachment-table-container">
-        <Table
-          dataSource={filtered}
-          columns={columns}
-          rowKey="id"
-          pagination={{
-            current: page,
-            pageSize,
-            showSizeChanger: false,
-            onChange: setPage,
-          }}
-          size="middle"
-          tableLayout={DETACHMENT_TABLE_LAYOUT}
-          scroll={{ x: tableScrollX }}
+        <CustomizeColumnsButton
+          category={activeCategory}
+          visibility={activeColumnVisibility}
+          onToggle={handleColumnToggle}
         />
       </div>
-    </>
-  );
 
-  const categoryTabs = COMPONENT_CATEGORIES.map((category) => ({
-    key: category,
-    label: (
-      <Space size={8}>
-        {CATEGORY_LABELS[category]}
-        <Badge
-          count={categoryCounts[category]}
-          overflowCount={999}
-          style={{ backgroundColor: '#00636a' }}
-        />
-      </Space>
-    ),
-  }));
-
-  return (
-    <div className="lseries-section">
-      <div className="lseries-section-header">
-        <Typography.Title
-          level={5}
-          className="lseries-section-title"
-          style={{ marginTop: 0, marginBottom: 0, color: '#000000', fontWeight: 600 }}
-        >
-          Detachment Components
-        </Typography.Title>
-        {!viewOnly && onAddNsn && (
-          <Button type="primary" icon={<PlusOutlined />} onClick={onAddNsn}>
-            Add NSN
-          </Button>
-        )}
-      </div>
-
-      <Tabs
-        className="lseries-category-tabs"
-        activeKey={activeCategory}
-        onChange={(key) => setActiveCategory(key as ComponentCategory)}
-        items={categoryTabs}
-      />
-
-      {tableContent}
+      <Card size="small" className="lseries-category-table-card" bordered={false}>
+        <div className="detachment-table-container">
+          <Table
+            dataSource={filtered}
+            columns={columns}
+            rowKey="id"
+            pagination={{
+              current: page,
+              pageSize,
+              showSizeChanger: false,
+              onChange: setPage,
+            }}
+            size="middle"
+            tableLayout={DETACHMENT_TABLE_LAYOUT}
+            scroll={{ x: tableScrollX }}
+          />
+        </div>
+      </Card>
     </div>
   );
 }

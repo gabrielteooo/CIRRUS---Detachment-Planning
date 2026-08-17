@@ -16,6 +16,7 @@ import {
   countWorkQueueLines,
 } from '../../types/planLine';
 import type { OfflineApprovalRecord, PlanLine } from '../../types/planLine';
+import { isPolLine } from '../../types/planLine';
 import type { NsnCatalogEntry } from '../../data/nsnCatalog';
 import { createAddedPlanLines } from '../../utils/addedPlanLines';
 import { showAddedNsnToast, showPlanLineSaveToast } from '../../utils/planLineToasts';
@@ -27,6 +28,7 @@ import AddNsnDrawer from './AddNsnDrawer';
 import InventoryDrawer from './InventoryDrawer';
 import NsnDrilldownModal from './NsnDrilldownModal';
 import EditLineDrawer from './EditLineDrawer';
+import EditPolLineDrawer from './EditPolLineDrawer';
 import RemarksModal from './RemarksModal';
 
 const STATUS_COLORS: Record<string, string> = {
@@ -78,6 +80,10 @@ export default function PlanDetailsContent({
     const previous = lines.find((l) => l.id === updated.id);
     const next = lines.map((l) => (l.id === updated.id ? updated : l));
     updatePlanLines(planId, next);
+    if (isPolLine(updated)) {
+      message.success('POL line updated');
+      return;
+    }
     showPlanLineSaveToast(message, previous, updated);
   };
 
@@ -102,6 +108,13 @@ export default function PlanDetailsContent({
       return approval ? applyOfflineApproval(line, approval) : clearOfflineApproval(line);
     });
     updatePlanLines(planId, next);
+  };
+
+  const handlePolFulfilledChange = (line: PlanLine, fulfilled: boolean) => {
+    updatePlanLines(
+      planId,
+      lines.map((item) => (item.id === line.id ? { ...item, polFulfilled: fulfilled } : item)),
+    );
   };
 
   const tabItems = [
@@ -134,6 +147,7 @@ export default function PlanDetailsContent({
           onViewNsn={setNsnDrilldownLine}
           onAddNsn={() => setAddNsnOpen(true)}
           onDeleteLine={handleDeleteLine}
+          onPolFulfilledChange={handlePolFulfilledChange}
         />
       ),
     },
@@ -236,13 +250,22 @@ export default function PlanDetailsContent({
         onClose={() => setNsnDrilldownLine(null)}
       />
 
-      <EditLineDrawer
-        line={editLine}
-        open={!!editLine}
-        onClose={closeEditLine}
-        onSave={handleSaveLine}
-        planNeedByDate={plan.needByDate}
-      />
+      {editLine && isPolLine(editLine) ? (
+        <EditPolLineDrawer
+          line={editLine}
+          open={!!editLine}
+          onClose={closeEditLine}
+          onSave={handleSaveLine}
+        />
+      ) : (
+        <EditLineDrawer
+          line={editLine}
+          open={!!editLine}
+          onClose={closeEditLine}
+          onSave={handleSaveLine}
+          planNeedByDate={plan.needByDate}
+        />
+      )}
 
       <AddNsnDrawer
         open={addNsnOpen}

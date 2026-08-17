@@ -93,6 +93,8 @@ export interface PlanLine {
   system?: string;
   /** Component notes from L-series template (shown on LRU / Consumable / POL tabs). */
   remarks?: string;
+  /** POL tab: planner marks line fulfilled when POL is ready. */
+  polFulfilled?: boolean;
   interchangeableMembers?: InterchangeableMember[];
   toBringAllocation?: ToBringAllocation[];
   /** Default member NSN to top up when resolving group shortfall. */
@@ -146,10 +148,156 @@ export function canDeviateQty(line: PlanLine): boolean {
 }
 
 export function computeFillRate(lines: PlanLine[]): number {
-  const operational = getOperationalLines(lines);
-  if (operational.length === 0) return 0;
-  const metCount = operational.filter((l) => getLineStatus(l) === 'Met').length;
-  return Math.round((metCount / operational.length) * 100);
+  if (lines.length === 0) return 0;
+  const fulfilled = lines.filter((line) => {
+    if (isPolLine(line)) return isPolFulfilled(line);
+    return getLineStatus(line) === 'Met';
+  }).length;
+  return Math.round((fulfilled / lines.length) * 100);
+}
+
+export function getLinesForCategory(
+  lines: PlanLine[],
+  category: ComponentCategory,
+): PlanLine[] {
+  if (category === 'LRU') {
+    return lines.filter((line) => line.isAddedNsn || line.componentCategory === 'LRU');
+  }
+  return lines.filter((line) => line.componentCategory === category);
+}
+
+export function isPolFulfilled(line: PlanLine): boolean {
+  return line.polFulfilled === true;
+}
+
+export function computeCategoryFillRate(
+  lines: PlanLine[],
+  category: ComponentCategory,
+): number {
+  const categoryLines = getLinesForCategory(lines, category);
+  if (categoryLines.length === 0) return 0;
+
+  if (category === 'POL') {
+    const fulfilled = categoryLines.filter(isPolFulfilled).length;
+    return Math.round((fulfilled / categoryLines.length) * 100);
+  }
+
+  const fulfilled = categoryLines.filter((line) => getLineStatus(line) === 'Met').length;
+  return Math.round((fulfilled / categoryLines.length) * 100);
+}
+
+export interface CategoryFillRates {
+  LRU: number;
+  Consumable: number;
+  POL: number;
+}
+
+export function computeCategoryFillRates(lines: PlanLine[]): CategoryFillRates {
+  return {
+    LRU: computeCategoryFillRate(lines, 'LRU'),
+    Consumable: computeCategoryFillRate(lines, 'Consumable'),
+    POL: computeCategoryFillRate(lines, 'POL'),
+  };
+}
+
+export interface CategoryFulfillmentSummary {
+  fulfilled: number;
+  total: number;
+  percent: number;
+}
+
+export function getCategoryFulfillmentSummary(
+  lines: PlanLine[],
+  category: ComponentCategory,
+): CategoryFulfillmentSummary {
+  const categoryLines = getLinesForCategory(lines, category);
+  const total = categoryLines.length;
+
+  if (total === 0) {
+    return { fulfilled: 0, total: 0, percent: 0 };
+  }
+
+  const fulfilled =
+    category === 'POL'
+      ? categoryLines.filter(isPolFulfilled).length
+      : categoryLines.filter((line) => getLineStatus(line) === 'Met').length;
+
+  return {
+    fulfilled,
+    total,
+    percent: Math.round((fulfilled / total) * 100),
+  };
+}
+
+const CATEGORY_COLLAPSE_LABELS: Record<ComponentCategory, string> = {
+  LRU: 'LRU',
+  Consumable: 'Consumables',
+  POL: 'POL',
+};
+
+export function formatCategoryCollapseLabel(
+  lines: PlanLine[],
+  category: ComponentCategory,
+): string {
+  const { fulfilled, total, percent } = getCategoryFulfillmentSummary(lines, category);
+  const label = CATEGORY_COLLAPSE_LABELS[category];
+  return `${label} - ${fulfilled}/${total} (${percent}%)`;
+}
+
+export interface CannibalisedEntry {
+  lineId: string;
+  nsn: string;
+  description: string;
+  tailNumber: string;
+  qty: number;
+}
+
+/** Shortfall resolutions that include cannibalise (one entry per cannibalise action). */
+export function getCannibalisedEntries(lines: PlanLine[]): CannibalisedEntry[] {
+  const entries: CannibalisedEntry[] = [];
+
+  for (const line of lines) {
+    for (const action of line.shortfallActions) {
+      if (action.type !== 'cannibalise') continue;
+      entries.push({
+        lineId: line.id,
+        nsn: line.nsn,
+        description: line.description,
+        tailNumber: action.tailNumber.trim() || '—',
+        qty: action.qty,
+      });
+    }
+  }
+
+  return entries;
+}
+
+export interface WaitEntry {
+  lineId: string;
+  nsn: string;
+  description: string;
+  needByDate: string;
+  qty: number;
+}
+
+/** Shortfall resolutions that include wait (one entry per wait action). */
+export function getWaitEntries(lines: PlanLine[]): WaitEntry[] {
+  const entries: WaitEntry[] = [];
+
+  for (const line of lines) {
+    for (const action of line.shortfallActions) {
+      if (action.type !== 'wait') continue;
+      entries.push({
+        lineId: line.id,
+        nsn: line.nsn,
+        description: line.description,
+        needByDate: action.needByDate,
+        qty: action.qty,
+      });
+    }
+  }
+
+  return entries;
 }
 
 export function countShortfalls(lines: PlanLine[]): number {

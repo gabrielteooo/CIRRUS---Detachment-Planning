@@ -10,7 +10,10 @@ import {
   Button,
   Space,
   message,
+  DatePicker,
 } from 'antd';
+import dayjs, { type Dayjs } from 'dayjs';
+import { formatAircraftTailNumber, isValidAircraftTailNumber } from '../../utils/tailNumber';
 import { useEffect, type ReactNode } from 'react';
 import type {
   LineStatus,
@@ -27,8 +30,6 @@ import {
   getShortfallQty,
   isInterchangeableLine,
 } from '../../types/planLine';
-import { formatDate } from '../../utils/planUtils';
-
 interface EditLineDrawerProps {
   line: PlanLine | null;
   open: boolean;
@@ -144,13 +145,20 @@ export default function EditLineDrawer({
         acceptQty: acceptAction?.qty ?? defaultQty,
         acceptRemarks: acceptAction?.type === 'accept' ? acceptAction.remarks : '',
         waitQty: waitAction?.qty ?? defaultQty,
+        waitEdd: dayjs(
+          waitAction?.type === 'wait' ? waitAction.needByDate : planNeedByDate,
+          'YYYY-MM-DD',
+        ),
         waitRemarks: waitAction?.type === 'wait' ? waitAction.remarks : '',
         cannQty: cannAction?.qty ?? defaultQty,
-        cannTail: cannAction?.type === 'cannibalise' ? cannAction.tailNumber : '',
+        cannTail:
+          cannAction?.type === 'cannibalise'
+            ? formatAircraftTailNumber(cannAction.tailNumber)
+            : '',
         cannComments: cannAction?.type === 'cannibalise' ? cannAction.workCentreComments : '',
       });
     }
-  }, [line, open, form]);
+  }, [line, open, form, planNeedByDate]);
 
   const currentToBring = toBringQty ?? line?.toBringQty ?? 0;
   const lineMode = line ? resolveLineMode(line, currentToBring) : null;
@@ -228,11 +236,12 @@ export default function EditLineDrawer({
                 };
               }
               if (type === 'wait') {
+                const waitEdd = values.waitEdd as Dayjs | undefined;
                 return {
                   type: 'wait',
                   qty: values.waitQty ?? 1,
                   remarks: values.waitRemarks ?? '',
-                  needByDate: planNeedByDate,
+                  needByDate: waitEdd?.format('YYYY-MM-DD') ?? planNeedByDate,
                   approved: existing?.approved ?? false,
                   targetNsn: shortfallTargetNsn,
                 };
@@ -240,7 +249,7 @@ export default function EditLineDrawer({
               return {
                 type: 'cannibalise',
                 qty: values.cannQty ?? 1,
-                tailNumber: values.cannTail ?? '',
+                tailNumber: formatAircraftTailNumber(values.cannTail ?? ''),
                 workCentreComments: values.cannComments ?? '',
                 confirmedWithWorkCentre: true,
                 approved: existing?.approved ?? false,
@@ -261,8 +270,17 @@ export default function EditLineDrawer({
         return;
       }
 
-      if (mode === 'shortfall' && actionTypes.includes('cannibalise') && !values.cannTail) {
-        message.error('Cannibalise requires aircraft tail #');
+      if (
+        mode === 'shortfall' &&
+        actionTypes.includes('cannibalise') &&
+        !isValidAircraftTailNumber(values.cannTail ?? '')
+      ) {
+        message.error('Cannibalise requires a 3–4 digit aircraft tail number');
+        return;
+      }
+
+      if (mode === 'shortfall' && actionTypes.includes('wait') && !values.waitEdd) {
+        message.error('Wait resolution requires an EDD');
         return;
       }
 
@@ -473,24 +491,15 @@ export default function EditLineDrawer({
                     {selectedActions.includes('wait') && (
                       <ActionDetailFields>
                         <Form.Item
-                          name="waitRemarks"
-                          label="Remarks"
-                          rules={[{ required: true, message: 'Enter remarks' }]}
+                          name="waitEdd"
+                          label="EDD"
+                          rules={[{ required: true, message: 'Select expected delivery date' }]}
                         >
-                          <Input.TextArea rows={2} placeholder="Enter remarks" />
+                          <DatePicker style={{ width: '100%' }} format="D MMM YYYY" />
                         </Form.Item>
-                        <div>
-                          <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 4 }}>
-                            Need-by-date
-                          </Typography.Text>
-                          <Typography.Text strong>{formatDate(planNeedByDate)}</Typography.Text>
-                          <Typography.Text
-                            type="secondary"
-                            style={{ display: 'block', fontSize: 12, marginTop: 4 }}
-                          >
-                            From detachment plan
-                          </Typography.Text>
-                        </div>
+                        <Form.Item name="waitRemarks" label="Remarks">
+                          <Input.TextArea rows={2} placeholder="Optional remarks" />
+                        </Form.Item>
                       </ActionDetailFields>
                     )}
                   </div>
@@ -516,9 +525,15 @@ export default function EditLineDrawer({
                         <Form.Item
                           name="cannTail"
                           label="Aircraft tail #"
-                          rules={[{ required: true, message: 'Enter tail #' }]}
+                          rules={[
+                            { required: true, message: 'Enter tail #' },
+                            {
+                              pattern: /^\d{3,4}$/,
+                              message: 'Enter a 3–4 digit tail number',
+                            },
+                          ]}
                         >
-                          <Input placeholder="e.g. AF-2041" />
+                          <Input placeholder="e.g. 987" maxLength={4} inputMode="numeric" />
                         </Form.Item>
                         <Form.Item name="cannComments" label="Remarks">
                           <Input.TextArea rows={2} />

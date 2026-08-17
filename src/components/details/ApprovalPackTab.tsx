@@ -174,7 +174,7 @@ export default function ApprovalPackTab({
   return (
     <div className="approval-pack-tab">
       <Typography.Paragraph type="secondary" className="approval-pack-tab-intro">
-        Deviations and shortfalls with resolution recorded — ready for offline approval
+        Additional requirements and shortfalls with resolution recorded — ready for offline approval
         presentation.
       </Typography.Paragraph>
 
@@ -274,7 +274,7 @@ export default function ApprovalPackTab({
       {deviations.length > 0 && (
         <section className="approval-pack-tab-section">
           <Typography.Title level={5} className="approval-pack-section-title">
-            Deviations ({deviations.length})
+            Additional requirements ({deviations.length})
           </Typography.Title>
           <div className="detachment-table-container">
             <Table

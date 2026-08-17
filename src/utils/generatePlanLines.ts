@@ -12,6 +12,7 @@ import {
   componentAppliesToVariant,
   getPolRequiredQty,
   type ComponentCategory,
+  type LSComponent,
   type LSPlatformTemplate,
 } from '../data/lSeriesTemplate';
 
@@ -227,13 +228,62 @@ export function buildPlanLinesFromTemplate(
       trade,
       system,
       remarks: '',
+      polFulfilled: isPol ? false : undefined,
     };
   });
+}
+
+/** POL lines shown on Exercise Falcon 2026 (plan-001) for demo clarity. */
+const FALCON_DEMO_POL_NSNS = [
+  '5831-04-7296', // Aviation Turbine Fuel
+  '8316-27-4905', // Wide-Temperature Aircraft Grease
+  '3950-74-8216', // Instrument Lubricating Oil
+  '1597-36-2840', // Corrosion-Preventive Compound
+];
+
+function buildPolPlanLine(lineId: string, component: LSComponent): PlanLine {
+  const requiredQty = getPolRequiredQty(component);
+  return {
+    id: lineId,
+    nsn: component.nsn,
+    description: component.description,
+    requiredQty,
+    availableQty: requiredQty,
+    toBringQty: requiredQty,
+    inventory: buildInventory(component.nsn, component.description, requiredQty),
+    shortfallActions: [],
+    componentCategory: 'POL',
+    uom: component.uom,
+    mpn: component.mpn,
+    remarks: '',
+    polFulfilled: false,
+  };
+}
+
+/** Template POL rows share NSNs with consumables — inject four explicit POL lines for demo. */
+function applyFalconPolDemo(planId: string, lines: PlanLine[]): PlanLine[] {
+  const template = L_SERIES_TEMPLATE['F-16'];
+  const withoutPolConflicts = lines.filter(
+    (line) =>
+      line.componentCategory !== 'POL' && !FALCON_DEMO_POL_NSNS.includes(line.nsn),
+  );
+
+  const polLines = FALCON_DEMO_POL_NSNS.flatMap((nsn, index) => {
+    const component = template.components.find((c) => c.nsn === nsn && c.category === 'POL');
+    if (!component) return [];
+
+    const existing = lines.find((line) => line.nsn === nsn);
+    return [buildPolPlanLine(existing?.id ?? `${planId}-pol-${index + 1}`, component)];
+  });
+
+  return [...withoutPolConflicts, ...polLines];
 }
 
 /** Demo scenario overlays for Exercise Falcon 2026 (plan-001). */
 export function applyDemoScenario(planId: string, lines: PlanLine[]): PlanLine[] {
   if (planId !== 'plan-001') return lines;
+
+  lines = applyFalconPolDemo(planId, lines);
 
   const patch = (nsn: string, updates: Partial<PlanLine>) => {
     const idx = lines.findIndex((l) => l.nsn === nsn);
@@ -249,7 +299,7 @@ export function applyDemoScenario(planId: string, lines: PlanLine[]): PlanLine[]
     ],
     shortfallActions: [
       { type: 'wait', qty: 1, needByDate: '2026-03-01', remarks: 'Expedite repair — PO1234567 expected end Feb', approved: false },
-      { type: 'cannibalise', qty: 1, tailNumber: 'AF-2041', workCentreComments: 'Confirmed with Hangar 3 MRO', confirmedWithWorkCentre: true, approved: false },
+      { type: 'cannibalise', qty: 1, tailNumber: '987', workCentreComments: 'Confirmed with Hangar 3 MRO', confirmedWithWorkCentre: true, approved: false },
     ],
   });
 
@@ -277,7 +327,7 @@ export function applyDemoScenario(planId: string, lines: PlanLine[]): PlanLine[]
     shortfallActions: [],
   });
 
-  patch('7045-18-2639', {
+  patch('1597-36-2822', {
     availableQty: 3,
     toBringQty: 5,
     shortfallActions: [
@@ -288,6 +338,24 @@ export function applyDemoScenario(planId: string, lines: PlanLine[]): PlanLine[]
       approvedDate: '2026-02-12',
       meeting: 'Detachment readiness board',
     },
+  });
+
+  patch('5831-04-7296', {
+    polFulfilled: true,
+    remarks: 'Fuel uplift confirmed with host nation',
+  });
+
+  patch('8316-27-4905', {
+    polFulfilled: true,
+    remarks: 'Grease kits staged at deployment pack line',
+  });
+
+  patch('3950-74-8216', {
+    remarks: 'Include in deployment POL kit',
+  });
+
+  patch('1597-36-2840', {
+    remarks: 'Include MSDS folder',
   });
 
   patch('1560-01-2322', {

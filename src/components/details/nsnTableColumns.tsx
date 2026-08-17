@@ -1,5 +1,5 @@
 import type { ColumnType } from 'antd/es/table';
-import { Button, Space, Tag } from 'antd';
+import { Button, Checkbox, Space, Tag } from 'antd';
 import { getMpnForNsn } from '../../data/lSeriesTemplate';
 import type { Platform } from '../../types/detachment';
 import type { ComponentCategory, PlanLine } from '../../types/planLine';
@@ -20,6 +20,7 @@ export const PLATFORM_VARIANT_COLUMN_WIDTH = 120;
 export const QTY_COLUMN_WIDTH = 88;
 export const UOM_COLUMN_WIDTH = 70;
 export const REMARKS_COLUMN_WIDTH = 160;
+export const POL_FULFILLED_COLUMN_WIDTH = 88;
 export const TRADE_COLUMN_WIDTH = 90;
 export const SYSTEM_COLUMN_WIDTH = 120;
 
@@ -184,12 +185,53 @@ export function getRemarksColumn<T extends { remarks?: string }>(): ColumnType<T
   };
 }
 
-/** Reference-only POL tab: no links, status, or actions. */
+export function getPolFulfilledColumn(
+  viewOnly: boolean,
+  onToggle: (line: PlanLine, fulfilled: boolean) => void,
+): ColumnType<PlanLine> {
+  return {
+    title: 'Fulfilled',
+    key: 'polFulfilled',
+    width: POL_FULFILLED_COLUMN_WIDTH,
+    fixed: 'right' as const,
+    render: (_: unknown, record: PlanLine) => (
+      <Checkbox
+        checked={record.polFulfilled === true}
+        disabled={viewOnly}
+        onChange={(event) => onToggle(record, event.target.checked)}
+      />
+    ),
+  };
+}
+
+export function getPolActionColumn(
+  viewOnly: boolean,
+  onEditLine: (line: PlanLine) => void,
+): ColumnType<PlanLine> {
+  return {
+    title: 'Action',
+    key: 'action',
+    width: ACTION_COLUMN_WIDTH,
+    fixed: 'right' as const,
+    render: (_: unknown, record: PlanLine) =>
+      !viewOnly ? (
+        <Button type="link" size="small" onClick={() => onEditLine(record)}>
+          Edit
+        </Button>
+      ) : null,
+  };
+}
+
+/** POL tab: reference columns with optional edit for to-bring and remarks. */
 export function getPolReferenceColumns<T extends PlanLine>(
   platform: Platform,
   variant: string,
+  columnVisibility: Partial<Record<'remarks' | 'uom', boolean>> = {},
 ): ColumnType<T>[] {
-  return [
+  const showRemarks = columnVisibility.remarks !== false;
+  const showUom = columnVisibility.uom !== false;
+
+  const columns: ColumnType<T>[] = [
     {
       title: 'NSN',
       dataIndex: 'nsn',
@@ -206,9 +248,16 @@ export function getPolReferenceColumns<T extends PlanLine>(
     getPlatformVariantColumn<T>(platform, variant),
     getRequiredColumn<T>(),
     getToBringColumn<T>(),
-    getUomColumn<T>(),
-    getRemarksColumn<T>(),
   ];
+
+  if (showUom) {
+    columns.push(getUomColumn<T>());
+  }
+  if (showRemarks) {
+    columns.push(getRemarksColumn<T>());
+  }
+
+  return columns;
 }
 
 export function getOperationalComponentColumns(
@@ -217,13 +266,21 @@ export function getOperationalComponentColumns(
   variant: string,
   onViewNsn: (line: PlanLine) => void,
   onViewInventory: (line: PlanLine) => void,
+  columnVisibility: Partial<Record<'trade' | 'system' | 'remarks', boolean>> = {},
 ): ColumnType<PlanLine>[] {
+  const showTrade = category === 'LRU' && columnVisibility.trade === true;
+  const showSystem = category === 'LRU' && columnVisibility.system === true;
+  const showRemarks = columnVisibility.remarks !== false;
+
   const columns: ColumnType<PlanLine>[] = [
     ...getNsnMpnDescriptionColumns<PlanLine>(onViewNsn),
   ];
 
-  if (category === 'LRU') {
-    columns.push(getTradeColumn<PlanLine>(), getSystemColumn<PlanLine>());
+  if (showTrade) {
+    columns.push(getTradeColumn<PlanLine>());
+  }
+  if (showSystem) {
+    columns.push(getSystemColumn<PlanLine>());
   }
 
   columns.push(
@@ -231,10 +288,66 @@ export function getOperationalComponentColumns(
     getRequiredColumn<PlanLine>(),
     getAvailableColumn<PlanLine>(getAvailableColumnLinkRenderer(onViewInventory)),
     getToBringColumn<PlanLine>(),
-    getRemarksColumn<PlanLine>(),
   );
 
+  if (showRemarks) {
+    columns.push(getRemarksColumn<PlanLine>());
+  }
+
   return columns;
+}
+
+export function computeOperationalTableScrollX(
+  category: Extract<ComponentCategory, 'LRU' | 'Consumable'>,
+  columnVisibility: Partial<Record<'trade' | 'system' | 'remarks', boolean>> = {},
+): number {
+  const extraWidths = [
+    PLATFORM_VARIANT_COLUMN_WIDTH,
+    QTY_COLUMN_WIDTH,
+    QTY_COLUMN_WIDTH,
+    QTY_COLUMN_WIDTH,
+    STATUS_COLUMN_WIDTH,
+    ACTION_COLUMN_WIDTH,
+  ];
+
+  if (category === 'LRU' && columnVisibility.trade === true) {
+    extraWidths.unshift(TRADE_COLUMN_WIDTH);
+  }
+  if (category === 'LRU' && columnVisibility.system === true) {
+    extraWidths.unshift(SYSTEM_COLUMN_WIDTH);
+  }
+  if (columnVisibility.remarks !== false) {
+    extraWidths.splice(-2, 0, REMARKS_COLUMN_WIDTH);
+  }
+
+  return computeDetachmentTableScrollX(extraWidths);
+}
+
+export function computePolTableScrollX(
+  columnVisibility: Partial<Record<'remarks' | 'uom', boolean>> = {},
+  options: { includeFulfilled?: boolean; includeAction?: boolean } = {},
+): number {
+  const { includeFulfilled = true, includeAction = false } = options;
+  const extraWidths = [
+    PLATFORM_VARIANT_COLUMN_WIDTH,
+    QTY_COLUMN_WIDTH,
+    QTY_COLUMN_WIDTH,
+  ];
+
+  if (columnVisibility.uom !== false) {
+    extraWidths.push(UOM_COLUMN_WIDTH);
+  }
+  if (columnVisibility.remarks !== false) {
+    extraWidths.push(REMARKS_COLUMN_WIDTH);
+  }
+  if (includeFulfilled) {
+    extraWidths.push(POL_FULFILLED_COLUMN_WIDTH);
+  }
+  if (includeAction) {
+    extraWidths.push(ACTION_COLUMN_WIDTH);
+  }
+
+  return computeDetachmentTableScrollX(extraWidths);
 }
 
 export function getSummaryToBringColumn<T extends PlanLine>(): ColumnType<T> {
@@ -321,13 +434,14 @@ export const CONSUMABLE_OPERATIONAL_TABLE_SCROLL_X = computeDetachmentTableScrol
 /** @deprecated Use LRU_OPERATIONAL_TABLE_SCROLL_X or CONSUMABLE_OPERATIONAL_TABLE_SCROLL_X */
 export const DETACHMENT_TABLE_SCROLL_X = LRU_OPERATIONAL_TABLE_SCROLL_X;
 
-/** POL reference table: Platform/Variant, Required, To-bring, UOM, Remarks */
+/** POL reference table: Platform/Variant, Required, To-bring, UOM, Remarks, Fulfilled */
 export const POL_REFERENCE_TABLE_SCROLL_X = computeDetachmentTableScrollX([
   PLATFORM_VARIANT_COLUMN_WIDTH,
   QTY_COLUMN_WIDTH,
   QTY_COLUMN_WIDTH,
   UOM_COLUMN_WIDTH,
   REMARKS_COLUMN_WIDTH,
+  POL_FULFILLED_COLUMN_WIDTH,
 ]);
 
 /** Work queue: Platform/Variant, Required, Available, Delta, Edit */
