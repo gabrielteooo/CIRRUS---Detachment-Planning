@@ -93,7 +93,7 @@ export interface PlanLine {
   system?: string;
   /** Component notes from L-series template (shown on LRU / Consumable / POL tabs). */
   remarks?: string;
-  /** POL tab: planner marks line fulfilled when POL is ready. */
+  /** @deprecated POL fulfilment is derived from to-bring vs required qty. */
   polFulfilled?: boolean;
   interchangeableMembers?: InterchangeableMember[];
   toBringAllocation?: ToBringAllocation[];
@@ -122,19 +122,29 @@ export function getOperationalLines(lines: PlanLine[]): PlanLine[] {
   return lines.filter((line) => !isPolLine(line));
 }
 
+export function getPolLineStatus(line: PlanLine): LineStatus {
+  if (line.toBringQty < line.requiredQty) return 'Shortfall';
+  if (line.toBringQty > line.requiredQty) return 'Deviation';
+  return 'Met';
+}
+
 export function getLineStatus(line: PlanLine): LineStatus {
-  if (isPolLine(line)) return 'Met';
+  if (isPolLine(line)) return getPolLineStatus(line);
   if (getGroupAvailableQty(line) < line.requiredQty) return 'Shortfall';
   if (line.isAddedNsn || line.toBringQty > line.requiredQty) return 'Deviation';
   return 'Met';
 }
 
 export function getShortfallQty(line: PlanLine): number {
+  if (isPolLine(line)) {
+    return Math.max(0, line.requiredQty - line.toBringQty);
+  }
   return Math.max(0, line.requiredQty - getGroupAvailableQty(line));
 }
 
-/** Available minus required; negative when stock is short. */
+/** Available minus required; negative when stock is short. POL uses to-bring gap. */
 export function getShortfallDelta(line: PlanLine): number {
+  if (isPolLine(line)) return line.toBringQty - line.requiredQty;
   return getGroupAvailableQty(line) - line.requiredQty;
 }
 
@@ -149,10 +159,7 @@ export function canDeviateQty(line: PlanLine): boolean {
 
 export function computeFillRate(lines: PlanLine[]): number {
   if (lines.length === 0) return 0;
-  const fulfilled = lines.filter((line) => {
-    if (isPolLine(line)) return isPolFulfilled(line);
-    return getLineStatus(line) === 'Met';
-  }).length;
+  const fulfilled = lines.filter((line) => getLineStatus(line) === 'Met').length;
   return Math.round((fulfilled / lines.length) * 100);
 }
 
@@ -167,7 +174,7 @@ export function getLinesForCategory(
 }
 
 export function isPolFulfilled(line: PlanLine): boolean {
-  return line.polFulfilled === true;
+  return isPolLine(line) && getPolLineStatus(line) === 'Met';
 }
 
 export function computeCategoryFillRate(
@@ -176,11 +183,6 @@ export function computeCategoryFillRate(
 ): number {
   const categoryLines = getLinesForCategory(lines, category);
   if (categoryLines.length === 0) return 0;
-
-  if (category === 'POL') {
-    const fulfilled = categoryLines.filter(isPolFulfilled).length;
-    return Math.round((fulfilled / categoryLines.length) * 100);
-  }
 
   const fulfilled = categoryLines.filter((line) => getLineStatus(line) === 'Met').length;
   return Math.round((fulfilled / categoryLines.length) * 100);
@@ -217,10 +219,7 @@ export function getCategoryFulfillmentSummary(
     return { fulfilled: 0, total: 0, percent: 0 };
   }
 
-  const fulfilled =
-    category === 'POL'
-      ? categoryLines.filter(isPolFulfilled).length
-      : categoryLines.filter((line) => getLineStatus(line) === 'Met').length;
+  const fulfilled = categoryLines.filter((line) => getLineStatus(line) === 'Met').length;
 
   return {
     fulfilled,
@@ -323,7 +322,7 @@ export function hasNonAcceptShortfallResolution(line: PlanLine): boolean {
 export function computeShortfallResolvedProgress(
   lines: PlanLine[],
 ): { resolved: number; total: number } {
-  const shortfallLines = lines.filter((l) => getLineStatus(l) === 'Shortfall');
+  const shortfallLines = getOperationalLines(lines).filter((l) => getLineStatus(l) === 'Shortfall');
   const resolved = shortfallLines.filter(hasResolutionRecorded).length;
   return { resolved, total: shortfallLines.length };
 }
@@ -404,6 +403,7 @@ export function formatShortfallActions(actions: ShortfallAction[]): string {
 }
 
 export function isShortfallUnresolved(line: PlanLine): boolean {
+  if (isPolLine(line)) return getPolLineStatus(line) === 'Shortfall';
   return getLineStatus(line) === 'Shortfall' && line.shortfallActions.length === 0;
 }
 
@@ -447,12 +447,22 @@ export function allShortfallActionsApproved(actions: ShortfallAction[]): boolean
 
 export function hasResolutionRecorded(line: PlanLine): boolean {
   const status = getLineStatus(line);
+  if (isPolLine(line)) {
+    if (status === 'Deviation') return !!(line.deviationReason?.trim());
+    return status === 'Met';
+  }
   if (status === 'Shortfall') return line.shortfallActions.length > 0;
   if (status === 'Deviation') return !!(line.isAddedNsn || line.deviationReason?.trim());
   return false;
 }
 
 export function getLineActionLabel(line: PlanLine): 'Resolve' | 'Edit' | 'Deviate' {
+  if (isPolLine(line)) {
+    if (getPolLineStatus(line) === 'Deviation' && !line.deviationReason?.trim()) {
+      return 'Deviate';
+    }
+    return 'Edit';
+  }
   const status = getLineStatus(line);
   if (status === 'Shortfall') {
     return hasResolutionRecorded(line) ? 'Edit' : 'Resolve';
@@ -461,7 +471,9 @@ export function getLineActionLabel(line: PlanLine): 'Resolve' | 'Edit' | 'Deviat
 }
 
 export function lineNeedsApproval(line: PlanLine): boolean {
-  if (isPolLine(line)) return false;
+  if (isPolLine(line)) {
+    return getPolLineStatus(line) === 'Deviation';
+  }
   const status = getLineStatus(line);
   if (status === 'Shortfall') return line.shortfallActions.length > 0;
   if (status === 'Deviation') {
@@ -542,9 +554,9 @@ export function sortShortfallLinesByApproval(lines: PlanLine[]): PlanLine[] {
   return [...lines].sort((a, b) => rank(a) - rank(b));
 }
 
-/** Shortfalls without resolution — work queue only; deviations and POL are excluded. */
+/** Shortfalls without resolution — includes POL lines below required to-bring. */
 export function getWorkQueueLines(lines: PlanLine[]): PlanLine[] {
-  return getOperationalLines(lines).filter(isShortfallUnresolved);
+  return lines.filter(isShortfallUnresolved);
 }
 
 /** Shortfalls and deviations with resolution recorded (pending or approved). */

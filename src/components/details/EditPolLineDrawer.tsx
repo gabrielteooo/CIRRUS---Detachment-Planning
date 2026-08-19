@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
-import { Button, Drawer, Form, Input, InputNumber, Typography } from 'antd';
-import type { PlanLine } from '../../types/planLine';
+import { Button, Drawer, Form, Input, InputNumber, Tag, Typography } from 'antd';
+import type { LineStatus, PlanLine } from '../../types/planLine';
+import { formatLineStatus, getPolLineStatus } from '../../types/planLine';
 
 interface EditPolLineDrawerProps {
   line: PlanLine | null;
@@ -9,6 +10,12 @@ interface EditPolLineDrawerProps {
   onSave: (line: PlanLine) => void;
 }
 
+const STATUS_TAG_COLORS: Record<LineStatus, string> = {
+  Met: 'success',
+  Deviation: 'warning',
+  Shortfall: 'error',
+};
+
 export default function EditPolLineDrawer({
   line,
   open,
@@ -16,25 +23,40 @@ export default function EditPolLineDrawer({
   onSave,
 }: EditPolLineDrawerProps) {
   const [form] = Form.useForm();
+  const toBringQty = Form.useWatch('toBringQty', form);
 
   useEffect(() => {
     if (line && open) {
       form.setFieldsValue({
         toBringQty: line.toBringQty,
         remarks: line.remarks ?? '',
+        deviationReason: line.deviationReason ?? '',
       });
     }
   }, [line, open, form]);
 
   if (!line) return null;
 
+  const previewStatus = getPolLineStatus({
+    ...line,
+    toBringQty: toBringQty ?? line.toBringQty,
+  });
+  const showDeviationReason = previewStatus === 'Deviation';
+
   const handleSave = async () => {
     try {
       const values = await form.validateFields();
+      const nextToBringQty = values.toBringQty ?? line.toBringQty;
+      const nextStatus = getPolLineStatus({ ...line, toBringQty: nextToBringQty });
+
       onSave({
         ...line,
-        toBringQty: values.toBringQty ?? line.toBringQty,
+        toBringQty: nextToBringQty,
         remarks: values.remarks?.trim() ?? '',
+        deviationReason:
+          nextStatus === 'Deviation' ? values.deviationReason?.trim() ?? '' : undefined,
+        deviationRemarks: undefined,
+        offlineApproval: nextStatus === 'Deviation' ? line.offlineApproval : undefined,
       });
       onClose();
     } catch {
@@ -62,8 +84,12 @@ export default function EditPolLineDrawer({
       }
     >
       <Typography.Paragraph type="secondary" style={{ marginBottom: 16 }}>
-        Update the quantity to bring and any planning remarks for this POL line.
+        Set to-bring to match required for fulfilment. Less is a shortfall; more is a deviation.
       </Typography.Paragraph>
+
+      <Tag color={STATUS_TAG_COLORS[previewStatus]} className="edit-line-status-tag">
+        {formatLineStatus(previewStatus)}
+      </Tag>
 
       <div className="edit-pol-line-summary">
         <Typography.Text type="secondary">NSN</Typography.Text>
@@ -89,6 +115,16 @@ export default function EditPolLineDrawer({
         >
           <InputNumber min={0} style={{ width: '100%' }} />
         </Form.Item>
+
+        {showDeviationReason && (
+          <Form.Item
+            name="deviationReason"
+            label="Deviation reason"
+            rules={[{ required: true, message: 'Enter a reason for bringing extra qty' }]}
+          >
+            <Input.TextArea rows={3} placeholder="Why is to-bring above the required qty?" />
+          </Form.Item>
+        )}
 
         <Form.Item name="remarks" label="Remarks">
           <Input.TextArea rows={4} placeholder="Planning notes for this POL item" />

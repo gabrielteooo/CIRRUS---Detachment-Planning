@@ -13,8 +13,6 @@ import { COMPONENT_CATEGORIES } from '../../data/lSeriesTemplate';
 import {
   getOperationalComponentColumns,
   getPolReferenceColumns,
-  getPolFulfilledColumn,
-  getPolActionColumn,
   computeOperationalTableScrollX,
   computePolTableScrollX,
   ACTION_COLUMN_WIDTH,
@@ -36,7 +34,6 @@ interface LSeriesTableProps {
   onViewNsn: (line: PlanLine) => void;
   onAddNsn?: () => void;
   onDeleteLine?: (line: PlanLine) => void;
-  onPolFulfilledChange?: (line: PlanLine, fulfilled: boolean) => void;
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -72,7 +69,6 @@ export default function LSeriesTable({
   onViewNsn,
   onAddNsn,
   onDeleteLine,
-  onPolFulfilledChange,
 }: LSeriesTableProps) {
   const [activeCategory, setActiveCategory] = useState<ComponentCategory>('LRU');
   const [search, setSearch] = useState('');
@@ -88,12 +84,6 @@ export default function LSeriesTable({
     setPage(1);
   }, [addedCount, activeCategory, search, statusFilter]);
 
-  useEffect(() => {
-    if (isPolTab && statusFilter !== 'all') {
-      setStatusFilter('all');
-    }
-  }, [isPolTab, statusFilter]);
-
   const sortedLines = useMemo(() => sortLinesForDisplay(lines), [lines]);
 
   const searchFilteredLines = useMemo(() => {
@@ -108,11 +98,11 @@ export default function LSeriesTable({
 
   const filtered = useMemo(() => {
     let result = searchFilteredLines.filter((line) => lineMatchesCategory(line, activeCategory));
-    if (!isPolTab && statusFilter !== 'all') {
+    if (statusFilter !== 'all') {
       result = result.filter((line) => getLineStatus(line) === statusFilter);
     }
     return result;
-  }, [searchFilteredLines, activeCategory, statusFilter, isPolTab]);
+  }, [searchFilteredLines, activeCategory, statusFilter]);
 
   const statusAndActionColumns = [
     {
@@ -181,18 +171,12 @@ export default function LSeriesTable({
     : [];
 
   const columns = isPolTab
-    ? [
-        ...getPolReferenceColumns<PlanLine>(platform, variant, activeColumnVisibility),
-        ...(onPolFulfilledChange
-          ? [getPolFulfilledColumn(viewOnly, onPolFulfilledChange)]
-          : []),
-        getPolActionColumn(viewOnly, onEditLine),
-      ]
+    ? [...getPolReferenceColumns<PlanLine>(platform, variant, activeColumnVisibility), ...statusAndActionColumns]
     : [...operationalColumns, ...statusAndActionColumns];
 
   const tableScrollX = isPolTab
     ? computePolTableScrollX(activeColumnVisibility, {
-        includeFulfilled: !!onPolFulfilledChange,
+        includeStatus: true,
         includeAction: !viewOnly,
       })
     : computeOperationalTableScrollX(
@@ -253,19 +237,17 @@ export default function LSeriesTable({
           style={{ width: 260 }}
           allowClear
         />
-        {!isPolTab && (
-          <Select
-            value={statusFilter}
-            onChange={setStatusFilter}
-            style={{ width: 140 }}
-            options={[
-              { label: 'All statuses', value: 'all' },
-              { label: 'Fulfilled', value: 'Met' },
-              { label: 'Deviation', value: 'Deviation' },
-              { label: 'Shortfall', value: 'Shortfall' },
-            ]}
-          />
-        )}
+        <Select
+          value={statusFilter}
+          onChange={setStatusFilter}
+          style={{ width: 140 }}
+          options={[
+            { label: 'All statuses', value: 'all' },
+            { label: 'Fulfilled', value: 'Met' },
+            { label: 'Deviation', value: 'Deviation' },
+            { label: 'Shortfall', value: 'Shortfall' },
+          ]}
+        />
         <CustomizeColumnsButton
           category={activeCategory}
           visibility={activeColumnVisibility}

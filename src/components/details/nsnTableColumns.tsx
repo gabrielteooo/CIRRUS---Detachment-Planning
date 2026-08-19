@@ -325,9 +325,9 @@ export function computeOperationalTableScrollX(
 
 export function computePolTableScrollX(
   columnVisibility: Partial<Record<'remarks' | 'uom', boolean>> = {},
-  options: { includeFulfilled?: boolean; includeAction?: boolean } = {},
+  options: { includeStatus?: boolean; includeAction?: boolean } = {},
 ): number {
-  const { includeFulfilled = true, includeAction = false } = options;
+  const { includeStatus = false, includeAction = false } = options;
   const extraWidths = [
     PLATFORM_VARIANT_COLUMN_WIDTH,
     QTY_COLUMN_WIDTH,
@@ -340,8 +340,8 @@ export function computePolTableScrollX(
   if (columnVisibility.remarks !== false) {
     extraWidths.push(REMARKS_COLUMN_WIDTH);
   }
-  if (includeFulfilled) {
-    extraWidths.push(POL_FULFILLED_COLUMN_WIDTH);
+  if (includeStatus) {
+    extraWidths.push(STATUS_COLUMN_WIDTH);
   }
   if (includeAction) {
     extraWidths.push(ACTION_COLUMN_WIDTH);

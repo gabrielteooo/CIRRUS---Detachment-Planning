@@ -1,6 +1,6 @@
 import { Empty, Table, Typography } from 'antd';
 import type { PlanLine } from '../../types/planLine';
-import { getWorkQueueLines } from '../../types/planLine';
+import { getLineActionLabel, getWorkQueueLines, isPolLine } from '../../types/planLine';
 import type { Platform } from '../../types/detachment';
 import {
   getNsnMpnDescriptionColumns,
@@ -50,7 +50,9 @@ export default function WorkQueueTab({
     getRequiredColumn<PlanLine>(),
     getAvailableColumn<PlanLine>(getAvailableColumnLinkRenderer(onViewInventory)),
     getSummaryShortfallDeltaColumn<PlanLine>(),
-    getSummaryEditColumn<PlanLine>(viewOnly, onEditLine, 'Resolve'),
+    getSummaryEditColumn<PlanLine>(viewOnly, onEditLine, (line) =>
+      isPolLine(line) ? 'Edit' : getLineActionLabel(line),
+    ),
   ];
 
   return (

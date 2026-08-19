@@ -110,13 +110,6 @@ export default function PlanDetailsContent({
     updatePlanLines(planId, next);
   };
 
-  const handlePolFulfilledChange = (line: PlanLine, fulfilled: boolean) => {
-    updatePlanLines(
-      planId,
-      lines.map((item) => (item.id === line.id ? { ...item, polFulfilled: fulfilled } : item)),
-    );
-  };
-
   const tabItems = [
     {
       key: 'work-queue',
@@ -147,7 +140,6 @@ export default function PlanDetailsContent({
           onViewNsn={setNsnDrilldownLine}
           onAddNsn={() => setAddNsnOpen(true)}
           onDeleteLine={handleDeleteLine}
-          onPolFulfilledChange={handlePolFulfilledChange}
         />
       ),
     },

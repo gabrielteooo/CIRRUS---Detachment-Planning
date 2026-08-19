@@ -1,4 +1,6 @@
 import { buildInterchangeableDemoLine } from './interchangeableLines';
+import { createAddedPlanLine } from './addedPlanLines';
+import { NSN_CATALOG } from '../data/nsnCatalog';
 import type { Platform, PlatformPlan } from '../types/detachment';
 import type { LSeriesRecord } from '../types/lSeries';
 import type { InventoryItem, PlanLine } from '../types/planLine';
@@ -219,7 +221,7 @@ export function buildPlanLinesFromTemplate(
       description,
       requiredQty,
       availableQty,
-      toBringQty: requiredQty,
+      toBringQty: isPol ? 0 : requiredQty,
       inventory,
       shortfallActions: [],
       componentCategory: category,
@@ -228,7 +230,6 @@ export function buildPlanLinesFromTemplate(
       trade,
       system,
       remarks: '',
-      polFulfilled: isPol ? false : undefined,
     };
   });
 }
@@ -249,14 +250,13 @@ function buildPolPlanLine(lineId: string, component: LSComponent): PlanLine {
     description: component.description,
     requiredQty,
     availableQty: requiredQty,
-    toBringQty: requiredQty,
+    toBringQty: 0,
     inventory: buildInventory(component.nsn, component.description, requiredQty),
     shortfallActions: [],
     componentCategory: 'POL',
     uom: component.uom,
     mpn: component.mpn,
     remarks: '',
-    polFulfilled: false,
   };
 }
 
@@ -279,11 +279,30 @@ function applyFalconPolDemo(planId: string, lines: PlanLine[]): PlanLine[] {
   return [...withoutPolConflicts, ...polLines];
 }
 
+/** Two default deviations for Exercise Falcon 2026 demo — one added NSN, one excess to-bring. */
+function applyFalconDeviationDemo(planId: string, lines: PlanLine[]): PlanLine[] {
+  const catalogEntry = NSN_CATALOG.find((entry) => entry.nsn === '1560-01-305');
+  if (!catalogEntry) return lines;
+
+  const addedDeviation: PlanLine = {
+    ...createAddedPlanLine(
+      planId,
+      catalogEntry,
+      0,
+      'Deployable secure radio requested per exercise comms plan',
+    ),
+    id: `${planId}-demo-deviation-added-1`,
+  };
+
+  return [addedDeviation, ...lines];
+}
+
 /** Demo scenario overlays for Exercise Falcon 2026 (plan-001). */
 export function applyDemoScenario(planId: string, lines: PlanLine[]): PlanLine[] {
   if (planId !== 'plan-001') return lines;
 
   lines = applyFalconPolDemo(planId, lines);
+  lines = applyFalconDeviationDemo(planId, lines);
 
   const patch = (nsn: string, updates: Partial<PlanLine>) => {
     const idx = lines.findIndex((l) => l.nsn === nsn);
@@ -342,20 +361,22 @@ export function applyDemoScenario(planId: string, lines: PlanLine[]): PlanLine[]
   });
 
   patch('5831-04-7296', {
-    polFulfilled: true,
+    toBringQty: lines.find((l) => l.nsn === '5831-04-7296')?.requiredQty ?? 0,
     remarks: 'Fuel uplift confirmed with host nation',
   });
 
   patch('8316-27-4905', {
-    polFulfilled: true,
+    toBringQty: lines.find((l) => l.nsn === '8316-27-4905')?.requiredQty ?? 0,
     remarks: 'Grease kits staged at deployment pack line',
   });
 
   patch('3950-74-8216', {
+    toBringQty: 0,
     remarks: 'Include in deployment POL kit',
   });
 
   patch('1597-36-2840', {
+    toBringQty: 0,
     remarks: 'Include MSDS folder',
   });
 
@@ -367,7 +388,8 @@ export function applyDemoScenario(planId: string, lines: PlanLine[]): PlanLine[]
 
   patch('1560-01-2344', {
     availableQty: 2,
-    toBringQty: 1,
+    toBringQty: 2,
+    deviationReason: 'Carry one spare generator beyond L-series allowance for exercise redundancy',
     inventory: buildInventory('1560-01-2344', 'Main Generator', 2),
   });
 
