@@ -38,7 +38,9 @@ export type NewBuyStatus = 'PR Release' | 'PO Release' | 'Delivered';
 export interface NewBuyRow {
   id: string;
   prNo: string;
+  prItem: string;
   poNo: string;
+  poItem: string;
   status: NewBuyStatus;
   prDate: string;
   poDate: string;
@@ -138,7 +140,9 @@ export function getNewBuyRows(line: PlanLine): NewBuyRow[] {
   return statuses.map((status, index) => ({
     id: `${line.nsn}-newbuy-${index}`,
     prNo: `12345678${index}`,
+    prItem: String((index + 1) * 10).padStart(5, '0'),
     poNo: `12345678${index}`,
+    poItem: String((index + 1) * 10).padStart(5, '0'),
     status,
     prDate: formatDate('2026-01-05'),
     poDate: formatDate('2026-01-05'),
@@ -147,6 +151,48 @@ export function getNewBuyRows(line: PlanLine): NewBuyRow[] {
     sdd: formatDate('2026-02-05'),
     vendor: 'ST Logistics',
     airwayBill: airwayBills[index] ?? '',
+    agingDays: (index + 1) * 30,
+    timeSincePrRaisedDays: (index + 1) * 30,
+  }));
+}
+
+export type RepairStatus = 'Sent out' | 'Repair done' | 'Delivered';
+
+export interface RepairRow {
+  id: string;
+  prNo: string;
+  poNo: string;
+  serialNo: string;
+  status: RepairStatus;
+  prDate: string;
+  poDate: string;
+  qty: number;
+  edd: string;
+  sdd: string;
+  vendor: string;
+  airwayBill: string;
+  agingDays: number;
+  timeSincePrRaisedDays: number;
+}
+
+export function getRepairRows(line: PlanLine): RepairRow[] {
+  const statuses: RepairStatus[] = ['Sent out', 'Repair done', 'Delivered', 'Delivered'];
+  const prNumbers = ['123456789', '123456780', '123456789', '123456789'];
+  const poNumbers = ['987654321', '987654322', '987654321', '987654321'];
+
+  return statuses.map((status, index) => ({
+    id: `${line.nsn}-repair-${index}`,
+    prNo: prNumbers[index] ?? '123456789',
+    poNo: poNumbers[index] ?? '987654321',
+    serialNo: padSerial(1),
+    status,
+    prDate: formatDate('2025-01-05'),
+    poDate: formatDate('2025-01-05'),
+    qty: 1,
+    edd: formatDate('2025-01-25'),
+    sdd: formatDate('2025-02-25'),
+    vendor: 'ST Logistics',
+    airwayBill: '158-12345678',
     agingDays: (index + 1) * 30,
     timeSincePrRaisedDays: (index + 1) * 30,
   }));

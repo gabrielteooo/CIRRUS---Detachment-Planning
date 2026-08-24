@@ -96,7 +96,7 @@ export const MOCK_PLANS: PlatformPlan[] = [
       {
         variant: 'DU',
         lSeriesVersion: 'L-F16-Long-2026',
-        parameterTier: 300,
+        parameterTier: 200,
       },
     ],
     status: 'Partially Approved',
@@ -124,7 +124,7 @@ export const MOCK_PLANS: PlatformPlan[] = [
       {
         variant: 'F',
         lSeriesVersion: 'L-CH47-Long-2026',
-        parameterTier: 4,
+        parameterTier: 2,
       },
     ],
     status: 'Draft',

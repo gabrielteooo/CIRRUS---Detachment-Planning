@@ -178,12 +178,12 @@ function computeRequiredQtyByNsn(
     });
   };
 
-  for (const row of plan.variantRows) {
-    for (const component of template.components) {
-      if (component.category === 'POL') continue;
-      const qty = component.qtyByTier[String(row.parameterTier)] ?? 0;
-      addComponent(component, qty);
-    }
+  const parameterTier = plan.variantRows[0]?.parameterTier ?? 0;
+
+  for (const component of template.components) {
+    if (component.category === 'POL') continue;
+    const qty = component.qtyByTier[String(parameterTier)] ?? 0;
+    addComponent(component, qty);
   }
 
   const planVariants = new Set(plan.variantRows.map((row) => row.variant));

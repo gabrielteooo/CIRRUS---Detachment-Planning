@@ -6,9 +6,11 @@ import type { PlanLine } from '../../types/planLine';
 import {
   getNewBuyRows,
   getOnAircraftRows,
+  getRepairRows,
   getStorageLocationRows,
   type NewBuyRow,
   type OnAircraftRow,
+  type RepairRow,
   type StorageLocationRow,
 } from '../../data/nsnDrilldownMock';
 import { DETACHMENT_TABLE_LAYOUT } from './nsnTableColumns';
@@ -46,6 +48,10 @@ function CopyableText({ value }: { value: string }) {
 
 function NewBuyStatusTag({ status }: { status: NewBuyRow['status'] }) {
   return <Tag className="new-buy-status-tag">{status}</Tag>;
+}
+
+function RepairStatusTag({ status }: { status: RepairRow['status'] }) {
+  return <Tag className="repair-status-tag">{status}</Tag>;
 }
 
 const STORAGE_COLUMNS: ColumnsType<StorageLocationRow> = [
@@ -130,12 +136,14 @@ const NEW_BUY_COLUMNS: ColumnsType<NewBuyRow> = [
     width: 130,
     render: (value: string) => <CopyableText value={value} />,
   },
+  { title: 'PR Item', dataIndex: 'prItem', width: 90, align: 'right' },
   {
     title: 'PO No.',
     dataIndex: 'poNo',
     width: 130,
     render: (value: string) => <CopyableText value={value} />,
   },
+  { title: 'PO Item', dataIndex: 'poItem', width: 90, align: 'right' },
   {
     title: 'Status',
     dataIndex: 'status',
@@ -170,10 +178,54 @@ const ON_AIRCRAFT_SCROLL_X = ON_AIRCRAFT_COLUMNS.reduce(
 );
 const NEW_BUY_SCROLL_X = NEW_BUY_COLUMNS.reduce((sum, col) => sum + Number(col.width ?? 120), 0);
 
+const REPAIR_COLUMNS: ColumnsType<RepairRow> = [
+  {
+    title: 'PR No.',
+    dataIndex: 'prNo',
+    width: 130,
+    render: (value: string) => <CopyableText value={value} />,
+  },
+  {
+    title: 'PO No.',
+    dataIndex: 'poNo',
+    width: 130,
+    render: (value: string) => <CopyableText value={value} />,
+  },
+  { title: 'S/N No.', dataIndex: 'serialNo', width: 120, ellipsis: true },
+  {
+    title: 'Status',
+    dataIndex: 'status',
+    width: 120,
+    render: (status: RepairRow['status']) => <RepairStatusTag status={status} />,
+  },
+  { title: 'PR Date', dataIndex: 'prDate', width: 110 },
+  { title: 'PO Date', dataIndex: 'poDate', width: 110 },
+  { title: 'Qty', dataIndex: 'qty', width: 70, align: 'right' },
+  { title: 'EDD', dataIndex: 'edd', width: 110 },
+  { title: 'SDD', dataIndex: 'sdd', width: 110 },
+  { title: 'Vendor', dataIndex: 'vendor', width: 120, ellipsis: true },
+  {
+    title: 'Airway Bill',
+    dataIndex: 'airwayBill',
+    width: 150,
+    render: (value: string) => <CopyableText value={value} />,
+  },
+  { title: 'Aging (days)', dataIndex: 'agingDays', width: 110, align: 'right' },
+  {
+    title: 'Time since PR Raised',
+    dataIndex: 'timeSincePrRaisedDays',
+    width: 160,
+    align: 'right',
+  },
+];
+
+const REPAIR_SCROLL_X = REPAIR_COLUMNS.reduce((sum, col) => sum + Number(col.width ?? 120), 0);
+
 export default function NsnDrilldownModal({ line, open, onClose }: NsnDrilldownModalProps) {
   const storageRows = useMemo(() => (line ? getStorageLocationRows(line) : []), [line]);
   const onAircraftRows = useMemo(() => (line ? getOnAircraftRows(line) : []), [line]);
   const newBuyRows = useMemo(() => (line ? getNewBuyRows(line) : []), [line]);
+  const repairRows = useMemo(() => (line ? getRepairRows(line) : []), [line]);
 
   if (!line) return null;
 
@@ -249,6 +301,23 @@ export default function NsnDrilldownModal({ line, open, onClose }: NsnDrilldownM
                   size="small"
                   tableLayout={DETACHMENT_TABLE_LAYOUT}
                   scroll={{ x: NEW_BUY_SCROLL_X }}
+                />
+              </div>
+            ),
+          },
+          {
+            key: 'repair',
+            label: 'Repair',
+            children: (
+              <div className="nsn-drilldown-table-container">
+                <Table
+                  dataSource={repairRows}
+                  columns={REPAIR_COLUMNS}
+                  rowKey="id"
+                  pagination={false}
+                  size="small"
+                  tableLayout={DETACHMENT_TABLE_LAYOUT}
+                  scroll={{ x: REPAIR_SCROLL_X }}
                 />
               </div>
             ),

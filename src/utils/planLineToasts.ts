@@ -36,6 +36,17 @@ export function showAddedNsnToast(messageApi: MessageInstance) {
   showDarkSuccess(messageApi, 'NSN(s) has been added successfully');
 }
 
+export function showLSeriesSubmittedToast(
+  messageApi: MessageInstance,
+  name: string,
+  isReplace: boolean,
+) {
+  showDarkSuccess(
+    messageApi,
+    isReplace ? `${name} has been updated successfully` : `${name} has been added successfully`,
+  );
+}
+
 export function showPlanLineSaveToast(
   messageApi: MessageInstance,
   before: PlanLine | undefined,

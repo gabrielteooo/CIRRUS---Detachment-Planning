@@ -38,12 +38,14 @@ export default function LSeriesUploadPreviewPage() {
       name: trimmed,
     });
     clearUploadPreview();
-    message.success(
-      uploadPreview.replacingRecordId
-        ? `L-series replaced (v${record.version})`
-        : 'L-series submitted',
-    );
-    navigate(`/system-configurations/l-series/${record.id}`);
+    navigate('/system-configurations/l-series', {
+      state: {
+        lSeriesToast: {
+          name: record.name,
+          isReplace: Boolean(uploadPreview.replacingRecordId),
+        },
+      },
+    });
   }, [uploadPreview, name, submitLSeriesUpload, clearUploadPreview, navigate]);
 
   useEffect(() => {

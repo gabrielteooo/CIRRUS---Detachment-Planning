@@ -9,15 +9,9 @@ export function formatPlatformVariant(platform: Platform, plan: PlatformPlan): s
 }
 
 export function formatVariantRowParameters(plan: PlatformPlan): string {
-  return plan.variantRows
-    .map((row) => {
-      const value =
-        plan.platform === 'F-16'
-          ? `${row.parameterTier} hrs`
-          : `${row.parameterTier} aircraft`;
-      return `${row.variant}: ${value}`;
-    })
-    .join(' · ');
+  const tier = plan.variantRows[0]?.parameterTier;
+  if (tier == null) return '—';
+  return plan.platform === 'F-16' ? `${tier} hrs total` : `${tier} aircraft total`;
 }
 
 export function formatLSeriesVersions(plan: PlatformPlan): string {

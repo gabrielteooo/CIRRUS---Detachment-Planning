@@ -7,11 +7,8 @@ import {
   DatePicker,
   Row,
   Col,
-  Button,
   message,
-  Typography,
 } from 'antd';
-import { PlusOutlined, MinusCircleOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { PLATFORM_VARIANTS, F16_FLYING_HOUR_TIERS, CH47_AIRCRAFT_TIERS } from '../../data/mockPlans';
 import { useApp } from '../../context/AppContext';
@@ -66,7 +63,8 @@ export default function CreatePlanModal({
       );
       form.setFieldsValue({
         lSeriesId: defaultRecord?.id,
-        variantRows: [{ variant: undefined, parameterTier: undefined }],
+        variants: undefined,
+        parameterTier: undefined,
       });
     }
   }, [open, preselectedDetachmentId, form, isDirector, plannerPlatform, lSeriesRecords]);
@@ -88,11 +86,7 @@ export default function CreatePlanModal({
     if (!isDirector && existingPlatforms.includes(record.platform)) {
       message.warning(`A ${record.platform} plan already exists for this detachment.`);
     }
-    form.setFieldValue('variantRows', [{ variant: undefined, parameterTier: undefined }]);
-  };
-
-  const handleVariantChange = (_variant: string, _index: number) => {
-    // variant row only — L-series is selected at plan level
+    form.setFieldsValue({ variants: undefined, parameterTier: undefined });
   };
 
   const handleSubmit = async () => {
@@ -104,12 +98,11 @@ export default function CreatePlanModal({
         return;
       }
 
-      const variantRows = (form.getFieldValue('variantRows') ?? values.variantRows).map(
-        (row: { variant: string; parameterTier: number }) => ({
-          ...row,
-          lSeriesVersion: record.name,
-        }),
-      );
+      const variantRows = (values.variants as string[]).map((variant: string) => ({
+        variant,
+        parameterTier: values.parameterTier as number,
+        lSeriesVersion: record.name,
+      }));
 
       const plan = createPlan({
         detachmentId: values.detachmentId,
@@ -148,7 +141,6 @@ export default function CreatePlanModal({
         layout="vertical"
         initialValues={{
           detachmentId: preselectedDetachmentId,
-          variantRows: [{ variant: undefined, parameterTier: undefined }],
         }}
         style={{ marginTop: 16 }}
       >
@@ -217,79 +209,43 @@ export default function CreatePlanModal({
           </Col>
         </Row>
 
-        <Typography.Text strong style={{ display: 'block', marginBottom: 8 }}>
-          Variants
-        </Typography.Text>
-        <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 12, fontSize: 13 }}>
-          Add a row for each variant in this plan. Flying hours apply per variant.
-        </Typography.Text>
-
-        <Form.List name="variantRows">
-          {(fields, { add, remove }) => (
-            <>
-              {fields.map(({ key, name, ...restField }) => (
-                <Row gutter={12} key={key} align="middle" style={{ marginBottom: 8 }}>
-                  <Col span={11}>
-                    <Form.Item
-                      {...restField}
-                      name={[name, 'variant']}
-                      rules={[{ required: true, message: 'Select variant' }]}
-                      style={{ marginBottom: 0 }}
-                    >
-                      <Select
-                        placeholder="Variant"
-                        options={(PLATFORM_VARIANTS[lockedPlatform ?? 'F-16'] ?? []).map((v) => ({
-                          label: v,
-                          value: v,
-                        }))}
-                        onChange={(v) => handleVariantChange(v, name)}
-                        disabled={!platform}
-                      />
-                    </Form.Item>
-                  </Col>
-                  <Col span={11}>
-                    <Form.Item
-                      {...restField}
-                      name={[name, 'parameterTier']}
-                      rules={[{ required: true, message: 'Required' }]}
-                      style={{ marginBottom: 0 }}
-                    >
-                      <Select
-                        placeholder={lockedPlatform === 'CH-47' ? 'Aircraft count' : 'Flying hours'}
-                        options={parameterOptions}
-                        disabled={!platform}
-                      />
-                    </Form.Item>
-                  </Col>
-                  <Col span={2}>
-                    {fields.length > 1 && (
-                      <Button
-                        type="text"
-                        icon={<MinusCircleOutlined />}
-                        onClick={() => remove(name)}
-                        aria-label="Remove variant row"
-                      />
-                    )}
-                  </Col>
-                </Row>
-              ))}
-              <Button
-                type="dashed"
-                onClick={() =>
-                  add({
-                    variant: undefined,
-                    parameterTier: undefined,
-                  })
-                }
-                icon={<PlusOutlined />}
-                style={{ width: '100%', marginBottom: 16 }}
+        <Row gutter={16}>
+          <Col span={12}>
+            <Form.Item
+              name="variants"
+              label="Variant"
+              rules={[{ required: true, message: 'Select at least one variant' }]}
+            >
+              <Select
+                mode="multiple"
+                placeholder="Select variant(s)"
+                options={(PLATFORM_VARIANTS[lockedPlatform ?? 'F-16'] ?? []).map((v) => ({
+                  label: v,
+                  value: v,
+                }))}
                 disabled={!platform}
-              >
-                Add variant
-              </Button>
-            </>
-          )}
-        </Form.List>
+              />
+            </Form.Item>
+          </Col>
+          <Col span={12}>
+            <Form.Item
+              name="parameterTier"
+              label={lockedPlatform === 'CH-47' ? 'Total aircraft count' : 'Total flying hours'}
+              rules={[{ required: true, message: 'Required' }]}
+              extra={
+                lockedPlatform === 'CH-47'
+                  ? 'Combined count across all selected variants.'
+                  : 'Combined flying hours across all selected variants.'
+              }
+            >
+              <Select
+                placeholder={lockedPlatform === 'CH-47' ? 'Select aircraft count' : 'Select flying hours'}
+                options={parameterOptions}
+                disabled={!platform}
+              />
+            </Form.Item>
+          </Col>
+        </Row>
 
         <Form.Item name="remarks" label="Plan remarks (optional)">
           <Input.TextArea rows={2} placeholder="Context for approvers" />

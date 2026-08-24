@@ -1,8 +1,8 @@
-import { useMemo, useState } from 'react';
-import { Button, Dropdown, Input, Select, Space, Typography } from 'antd';
+import { useMemo, useState, useEffect } from 'react';
+import { App, Button, Dropdown, Input, Select, Space, Typography } from 'antd';
 import { DownloadOutlined, SearchOutlined, UploadOutlined } from '@ant-design/icons';
 import type { MenuProps } from 'antd';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import LSeriesCard from '../components/lseries/LSeriesCard';
 import UploadLSeriesModal, {
   type UploadLSeriesMode,
@@ -11,6 +11,7 @@ import { useApp } from '../context/AppContext';
 import type { Platform } from '../types/detachment';
 import type { LSeriesRecord } from '../types/lSeries';
 import { downloadBlankLSeriesTemplate, downloadLSeriesWorkbook } from '../utils/lSeriesExcel';
+import { showLSeriesSubmittedToast } from '../utils/planLineToasts';
 
 const PLATFORM_OPTIONS = [
   { label: 'All platforms', value: 'all' },
@@ -29,6 +30,8 @@ interface UploadModalState {
 
 export default function LSeriesListPage() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const { message } = App.useApp();
   const { lSeriesRecords } = useApp();
   const [platformFilter, setPlatformFilter] = useState<string>('all');
   const [search, setSearch] = useState('');
@@ -36,6 +39,16 @@ export default function LSeriesListPage() {
     open: false,
     mode: 'new',
   });
+
+  useEffect(() => {
+    const toast = (
+      location.state as { lSeriesToast?: { name: string; isReplace: boolean } } | null
+    )?.lSeriesToast;
+    if (!toast) return;
+
+    showLSeriesSubmittedToast(message, toast.name, toast.isReplace);
+    navigate(location.pathname, { replace: true, state: null });
+  }, [location.state, location.pathname, message, navigate]);
 
   const filteredRecords = useMemo(() => {
     let result = [...lSeriesRecords];
