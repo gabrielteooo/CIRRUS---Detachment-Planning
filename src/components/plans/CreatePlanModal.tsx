@@ -5,19 +5,38 @@ import {
   Input,
   Select,
   DatePicker,
+  InputNumber,
   Row,
   Col,
+  Tooltip,
   message,
 } from 'antd';
+import { InfoCircleOutlined } from '@ant-design/icons';
+import dayjs, { type Dayjs } from 'dayjs';
 import { useNavigate } from 'react-router-dom';
-import { PLATFORM_VARIANTS, F16_FLYING_HOUR_TIERS, CH47_AIRCRAFT_TIERS } from '../../data/mockPlans';
 import { useApp } from '../../context/AppContext';
-import { formatDate } from '../../utils/planUtils';
+import { getTailOptions, getVariantsForTails } from '../../data/aircraftRegistry';
+import {
+  disableDateOutsideRange,
+  formatDateRange,
+  isDateRangeWithinParent,
+} from '../../utils/planUtils';
 
 interface CreatePlanModalProps {
   open: boolean;
   onClose: () => void;
   preselectedDetachmentId?: string;
+}
+
+function FieldLabel({ label, tooltip }: { label: string; tooltip: string }) {
+  return (
+    <span className="create-plan-field-label">
+      {label}
+      <Tooltip title={tooltip}>
+        <InfoCircleOutlined className="create-plan-field-label-icon" aria-label="More information" />
+      </Tooltip>
+    </span>
+  );
 }
 
 export default function CreatePlanModal({
@@ -63,22 +82,34 @@ export default function CreatePlanModal({
       );
       form.setFieldsValue({
         lSeriesId: defaultRecord?.id,
+        tailNumbers: undefined,
         variants: undefined,
-        parameterTier: undefined,
+        aircraftCount: undefined,
+        flyingHours: undefined,
       });
     }
   }, [open, preselectedDetachmentId, form, isDirector, plannerPlatform, lSeriesRecords]);
+
+  useEffect(() => {
+    if (!selectedDetachment) {
+      form.setFieldValue('planDetachmentDates', undefined);
+      return;
+    }
+
+    form.setFieldValue('planDetachmentDates', [
+      dayjs(selectedDetachment.detachmentDateStart),
+      dayjs(selectedDetachment.detachmentDateEnd),
+    ]);
+  }, [detachmentId, selectedDetachment, form]);
 
   const existingPlatforms = detachmentId
     ? getPlansForDetachment(detachmentId).map((p) => p.platform)
     : [];
 
-  const parameterOptions =
-    platform === 'F-16'
-      ? F16_FLYING_HOUR_TIERS.map((t) => ({ label: `${t} hrs`, value: t }))
-      : platform === 'CH-47'
-        ? CH47_AIRCRAFT_TIERS.map((t) => ({ label: `${t} aircraft`, value: t }))
-        : [];
+  const tailOptions = useMemo(
+    () => getTailOptions(lockedPlatform),
+    [lockedPlatform],
+  );
 
   const handleLSeriesChange = (value: string) => {
     const record = lSeriesRecords.find((item) => item.id === value);
@@ -86,8 +117,35 @@ export default function CreatePlanModal({
     if (!isDirector && existingPlatforms.includes(record.platform)) {
       message.warning(`A ${record.platform} plan already exists for this detachment.`);
     }
-    form.setFieldsValue({ variants: undefined, parameterTier: undefined });
+    form.setFieldsValue({
+      tailNumbers: undefined,
+      variants: undefined,
+      aircraftCount: undefined,
+      flyingHours: undefined,
+    });
   };
+
+  const handleTailNumbersChange = (tailNumbers: string[]) => {
+    if (!lockedPlatform) {
+      form.setFieldsValue({ variants: undefined, aircraftCount: undefined });
+      return;
+    }
+    form.setFieldsValue({
+      variants: getVariantsForTails(lockedPlatform, tailNumbers),
+      aircraftCount: tailNumbers.length > 0 ? tailNumbers.length : undefined,
+    });
+  };
+
+  const positiveIntegerRules = (message: string) => [
+    { required: true, message },
+    {
+      validator: (_: unknown, value: number | null | undefined) => {
+        if (value == null) return Promise.resolve();
+        if (value < 1) return Promise.reject(new Error('Enter a value of at least 1'));
+        return Promise.resolve();
+      },
+    },
+  ];
 
   const handleSubmit = async () => {
     try {
@@ -98,18 +156,29 @@ export default function CreatePlanModal({
         return;
       }
 
+      const aircraftCount = values.aircraftCount as number;
+      const flyingHours = values.flyingHours as number | undefined;
+      const parameterTier =
+        record.platform === 'F-16' ? (flyingHours as number) : aircraftCount;
+
       const variantRows = (values.variants as string[]).map((variant: string) => ({
         variant,
-        parameterTier: values.parameterTier as number,
+        parameterTier,
         lSeriesVersion: record.name,
       }));
+
+      const [planStart, planEnd] = values.planDetachmentDates as [Dayjs, Dayjs];
 
       const plan = createPlan({
         detachmentId: values.detachmentId,
         lSeriesId: record.id,
         platform: record.platform,
         detachmentType: record.missionType,
-        needByDate: values.needByDate.format('YYYY-MM-DD'),
+        needByDate: planEnd.format('YYYY-MM-DD'),
+        planDateStart: planStart.format('YYYY-MM-DD'),
+        planDateEnd: planEnd.format('YYYY-MM-DD'),
+        aircraftCount,
+        flyingHours: record.platform === 'F-16' ? flyingHours : undefined,
         variantRows,
         remarks: values.remarks,
       });
@@ -165,7 +234,14 @@ export default function CreatePlanModal({
               <Input
                 readOnly
                 placeholder="Select detachment first"
-                value={selectedDetachment ? formatDate(selectedDetachment.detachmentDate) : ''}
+                value={
+                  selectedDetachment
+                    ? formatDateRange(
+                        selectedDetachment.detachmentDateStart,
+                        selectedDetachment.detachmentDateEnd,
+                      )
+                    : ''
+                }
               />
             </Form.Item>
           </Col>
@@ -175,9 +251,13 @@ export default function CreatePlanModal({
           <Col span={12}>
             <Form.Item
               name="lSeriesId"
-              label="L-series"
+              label={
+                <FieldLabel
+                  label="L-series"
+                  tooltip="Platform and mission type are determined by the selected L-series."
+                />
+              }
               rules={[{ required: true, message: 'Select an L-series' }]}
-              extra="Platform and mission type are determined by the selected L-series."
             >
               <Select
                 placeholder="Select L-series (platform · mission type)"
@@ -200,11 +280,54 @@ export default function CreatePlanModal({
           </Col>
           <Col span={12}>
             <Form.Item
-              name="needByDate"
-              label="Need-by-date"
-              rules={[{ required: true, message: 'Select need-by-date' }]}
+              name="planDetachmentDates"
+              label={
+                <FieldLabel
+                  label="Plan detachment date"
+                  tooltip="Adjust your platform plan dates within the detachment window."
+                />
+              }
+              rules={[
+                { required: true, message: 'Select plan detachment dates' },
+                {
+                  validator: (_, value: [Dayjs, Dayjs] | undefined) => {
+                    if (!value?.[0] || !value?.[1] || !selectedDetachment) {
+                      return Promise.resolve();
+                    }
+                    const withinParent = isDateRangeWithinParent(
+                      { start: value[0], end: value[1] },
+                      {
+                        start: dayjs(selectedDetachment.detachmentDateStart),
+                        end: dayjs(selectedDetachment.detachmentDateEnd),
+                      },
+                    );
+                    if (!withinParent) {
+                      return Promise.reject(
+                        new Error('Plan dates must fall within the detachment date range'),
+                      );
+                    }
+                    if (value[1].isBefore(value[0], 'day')) {
+                      return Promise.reject(new Error('End date must be on or after start date'));
+                    }
+                    return Promise.resolve();
+                  },
+                },
+              ]}
             >
-              <DatePicker style={{ width: '100%' }} format="D MMM YYYY" />
+              <DatePicker.RangePicker
+                style={{ width: '100%' }}
+                format="D MMM YYYY"
+                disabled={!selectedDetachment}
+                disabledDate={(date) =>
+                  selectedDetachment
+                    ? disableDateOutsideRange(
+                        date,
+                        selectedDetachment.detachmentDateStart,
+                        selectedDetachment.detachmentDateEnd,
+                      )
+                    : false
+                }
+              />
             </Form.Item>
           </Col>
         </Row>
@@ -212,39 +335,74 @@ export default function CreatePlanModal({
         <Row gutter={16}>
           <Col span={12}>
             <Form.Item
-              name="variants"
-              label="Variant"
-              rules={[{ required: true, message: 'Select at least one variant' }]}
+              name="tailNumbers"
+              label="Tail"
+              rules={[{ required: true, message: 'Select at least one tail number' }]}
             >
               <Select
                 mode="multiple"
-                placeholder="Select variant(s)"
-                options={(PLATFORM_VARIANTS[lockedPlatform ?? 'F-16'] ?? []).map((v) => ({
-                  label: v,
-                  value: v,
-                }))}
+                placeholder="Select tail number(s)"
+                options={tailOptions}
                 disabled={!platform}
+                onChange={handleTailNumbersChange}
               />
             </Form.Item>
           </Col>
           <Col span={12}>
             <Form.Item
-              name="parameterTier"
-              label={lockedPlatform === 'CH-47' ? 'Total aircraft count' : 'Total flying hours'}
-              rules={[{ required: true, message: 'Required' }]}
-              extra={
-                lockedPlatform === 'CH-47'
-                  ? 'Combined count across all selected variants.'
-                  : 'Combined flying hours across all selected variants.'
-              }
+              name="variants"
+              label="Variant"
+              rules={[{ required: true, message: 'Select tail numbers to derive variants' }]}
             >
               <Select
-                placeholder={lockedPlatform === 'CH-47' ? 'Select aircraft count' : 'Select flying hours'}
-                options={parameterOptions}
+                mode="multiple"
+                placeholder="Auto-filled from tail numbers"
+                open={false}
+                disabled
+              />
+            </Form.Item>
+          </Col>
+        </Row>
+
+        <Row gutter={16}>
+          <Col span={lockedPlatform === 'F-16' ? 12 : 24}>
+            <Form.Item
+              name="aircraftCount"
+              label="No. of aircraft"
+              rules={positiveIntegerRules('Enter number of aircraft')}
+            >
+              <InputNumber
+                style={{ width: '100%' }}
+                min={1}
+                precision={0}
+                placeholder="Enter number of aircraft"
                 disabled={!platform}
               />
             </Form.Item>
           </Col>
+          {lockedPlatform === 'F-16' && (
+            <Col span={12}>
+              <Form.Item
+                name="flyingHours"
+                label={
+                  <FieldLabel
+                    label="Total flying hours"
+                    tooltip="Combined flying hours across all selected variants."
+                  />
+                }
+                rules={positiveIntegerRules('Enter total flying hours')}
+              >
+                <InputNumber
+                  style={{ width: '100%' }}
+                  min={1}
+                  precision={0}
+                  placeholder="Enter flying hours"
+                  disabled={!platform}
+                  addonAfter="hrs"
+                />
+              </Form.Item>
+            </Col>
+          )}
         </Row>
 
         <Form.Item name="remarks" label="Plan remarks (optional)">

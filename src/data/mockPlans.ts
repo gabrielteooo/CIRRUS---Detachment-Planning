@@ -6,11 +6,15 @@ import {
   countDeviations,
   countShortfalls,
 } from '../types/planLine';
+import dayjs from 'dayjs';
+import { MOCK_DETACHMENTS } from './mockDetachments';
 import { L_SERIES_TEMPLATE, L_SERIES_VERSION_IDS } from './lSeriesTemplate';
 
 export type GetPlanLines = (planId: string) => PlanLine[];
 
-export const MOCK_PLANS: PlatformPlan[] = [
+type PlanSeed = Omit<PlatformPlan, 'planDateStart' | 'planDateEnd' | 'aircraftCount' | 'flyingHours'>;
+
+const MOCK_PLANS_RAW: PlanSeed[] = [
   {
     id: 'plan-001',
     detachmentId: 'det-001',
@@ -344,6 +348,43 @@ export const MOCK_PLANS: PlatformPlan[] = [
     lastUpdated: '2024-10-28T08:00:00',
   },
 ];
+
+function withPlanDates(plan: PlanSeed): PlatformPlan {
+  const det = MOCK_DETACHMENTS.find((d) => d.id === plan.detachmentId);
+  if (!det) {
+    return {
+      ...plan,
+      planDateStart: plan.needByDate,
+      planDateEnd: plan.needByDate,
+      aircraftCount:
+        plan.platform === 'CH-47'
+          ? (plan.variantRows[0]?.parameterTier ?? 1)
+          : Math.max(1, plan.variantRows.length),
+      flyingHours: plan.platform === 'F-16' ? plan.variantRows[0]?.parameterTier : undefined,
+    };
+  }
+
+  const planEnd = dayjs(plan.needByDate).isAfter(dayjs(det.detachmentDateEnd))
+    ? det.detachmentDateEnd
+    : plan.needByDate;
+  const tentativeStart = dayjs(planEnd).subtract(7, 'day');
+  const planStart = tentativeStart.isBefore(dayjs(det.detachmentDateStart))
+    ? det.detachmentDateStart
+    : tentativeStart.format('YYYY-MM-DD');
+
+  return {
+    ...plan,
+    planDateStart: planStart,
+    planDateEnd: planEnd,
+    aircraftCount:
+      plan.platform === 'CH-47'
+        ? (plan.variantRows[0]?.parameterTier ?? 1)
+        : Math.max(1, plan.variantRows.length),
+    flyingHours: plan.platform === 'F-16' ? plan.variantRows[0]?.parameterTier : undefined,
+  };
+}
+
+export const MOCK_PLANS: PlatformPlan[] = MOCK_PLANS_RAW.map(withPlanDates);
 
 export const PLATFORM_VARIANTS: Record<string, string[]> = {
   'F-16': ['C', 'D', 'CU', 'DU'],

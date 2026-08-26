@@ -21,7 +21,6 @@ interface WorkQueueTabProps {
   viewOnly: boolean;
   onEditLine: (line: PlanLine) => void;
   onViewInventory: (line: PlanLine) => void;
-  onViewNsn: (line: PlanLine) => void;
 }
 
 export default function WorkQueueTab({
@@ -31,21 +30,20 @@ export default function WorkQueueTab({
   viewOnly,
   onEditLine,
   onViewInventory,
-  onViewNsn,
 }: WorkQueueTabProps) {
   const queueLines = getWorkQueueLines(lines);
 
   if (queueLines.length === 0) {
     return (
       <Empty
-        description="No shortfalls require action — all shortfalls have a resolution recorded."
+        description="No items require action — all shortfalls and deviations have been recorded."
         style={{ padding: '48px 0' }}
       />
     );
   }
 
   const columns = [
-    ...getNsnMpnDescriptionColumns<PlanLine>(onViewNsn),
+    ...getNsnMpnDescriptionColumns<PlanLine>(),
     getPlatformVariantColumn<PlanLine>(platform, variant),
     getRequiredColumn<PlanLine>(),
     getAvailableColumn<PlanLine>(getAvailableColumnLinkRenderer(onViewInventory)),

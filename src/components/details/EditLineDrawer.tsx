@@ -1,38 +1,45 @@
 import {
   Drawer,
   Form,
+  type FormInstance,
   InputNumber,
   Checkbox,
   Input,
   Select,
-  Tag,
   Typography,
   Button,
   Space,
   message,
-  DatePicker,
 } from 'antd';
 import { MinusCircleOutlined, PlusOutlined } from '@ant-design/icons';
-import dayjs, { type Dayjs } from 'dayjs';
-import { formatAircraftTailNumber, isValidAircraftTailNumber } from '../../utils/tailNumber';
-import { useEffect, type ReactNode } from 'react';
+import { formatAircraftTailNumber } from '../../utils/tailNumber';
+import { useEffect, useMemo, type ReactNode } from 'react';
+import {
+  formatAwaitingSupplyOrderLabel,
+  formatCannibaliseTailLabel,
+  getAwaitingSupplyOrderOptions,
+  getCannibaliseTailOptions,
+  type CannibaliseTailOption,
+} from '../../data/nsnDrilldownMock';
 import type {
   CannibaliseShortfallAction,
-  LineStatus,
   PlanLine,
   ShortfallAction,
   ShortfallActionType,
   WaitShortfallAction,
 } from '../../types/planLine';
 import {
-  formatLineStatus,
-  computeToBringQty,
+  canAcceptShortfall,
   canDeviateQty,
   getGroupAvailableQty,
   getPrimaryMemberNsn,
   getShortfallQty,
+  hasDeviationCondition,
+  hasShortfallCondition,
+  isLineFulfilled,
   isInterchangeableLine,
 } from '../../types/planLine';
+import LineStatusTags from './LineStatusTags';
 interface EditLineDrawerProps {
   line: PlanLine | null;
   open: boolean;
@@ -41,16 +48,14 @@ interface EditLineDrawerProps {
   planNeedByDate: string;
 }
 
-type LineMode = 'shortfall' | 'deviation';
-
 interface WaitEntryFormValue {
   qty: number;
-  edd: Dayjs;
+  orderId?: string;
 }
 
 interface CannibaliseEntryFormValue {
   qty: number;
-  tail: string;
+  tailNumber?: string;
 }
 
 function buildShortfallActionsFromForm(
@@ -86,14 +91,29 @@ function buildShortfallActionsFromForm(
     const existingWait = line.shortfallActions.filter(
       (a): a is WaitShortfallAction => a.type === 'wait',
     );
+    const orderOptions = getAwaitingSupplyOrderOptions(line);
+
     for (const [index, entry] of (values.waitEntries ?? []).entries()) {
+      const selectedOrder = orderOptions.find((order) => order.id === entry.orderId);
+
       actions.push({
         type: 'wait',
         qty: entry.qty ?? 1,
         remarks: values.waitRemarks ?? '',
-        needByDate: entry.edd?.format('YYYY-MM-DD') ?? planNeedByDate,
+        needByDate: selectedOrder?.edd ?? planNeedByDate,
         approved: existingWait[index]?.approved ?? false,
         targetNsn: shortfallTargetNsn,
+        supplyOrders: selectedOrder
+          ? [
+              {
+                id: selectedOrder.id,
+                poNumber: selectedOrder.poNumber,
+                edd: selectedOrder.edd,
+                serialNo: selectedOrder.serialNo,
+                qty: selectedOrder.qty,
+              },
+            ]
+          : undefined,
       });
     }
   }
@@ -106,7 +126,7 @@ function buildShortfallActionsFromForm(
       actions.push({
         type: 'cannibalise',
         qty: entry.qty ?? 1,
-        tailNumber: formatAircraftTailNumber(entry.tail ?? ''),
+        tailNumber: formatAircraftTailNumber(entry.tailNumber ?? ''),
         workCentreComments: values.cannComments ?? '',
         confirmedWithWorkCentre: true,
         approved: existingCann[index]?.approved ?? false,
@@ -118,26 +138,94 @@ function buildShortfallActionsFromForm(
   return actions;
 }
 
-const STATUS_TAG_COLORS: Record<LineStatus, string> = {
-  Met: 'success',
-  Deviation: 'warning',
-  Shortfall: 'error',
-};
-
-function resolveLineMode(line: PlanLine, toBringQty: number): LineMode | null {
-  if (getGroupAvailableQty(line) < line.requiredQty) return 'shortfall';
-  if (line.isAddedNsn || toBringQty > line.requiredQty) return 'deviation';
-  return null;
-}
-
-function resolveLineStatus(line: PlanLine, toBringQty: number): LineStatus {
-  if (getGroupAvailableQty(line) < line.requiredQty) return 'Shortfall';
-  if (line.isAddedNsn || toBringQty > line.requiredQty) return 'Deviation';
-  return 'Met';
+function previewLine(line: PlanLine, toBringQty: number): PlanLine {
+  return { ...line, toBringQty };
 }
 
 function ActionDetailFields({ children }: { children: ReactNode }) {
   return <div className="shortfall-action-details">{children}</div>;
+}
+
+function CannibaliseEntryRow({
+  field,
+  form,
+  tailOptions,
+  shortfallQty,
+  showRemove,
+  onRemove,
+}: {
+  field: { name: number; key: React.Key };
+  form: FormInstance;
+  tailOptions: CannibaliseTailOption[];
+  shortfallQty: number;
+  showRemove: boolean;
+  onRemove: () => void;
+}) {
+  const tailNumber = Form.useWatch(['cannibaliseEntries', field.name, 'tailNumber'], form);
+  const selectedTail = tailOptions.find((option) => option.tailNo === tailNumber);
+  const qtyMax = selectedTail
+    ? Math.min(selectedTail.qpa, shortfallQty || selectedTail.qpa)
+    : shortfallQty || undefined;
+
+  return (
+    <div className="shortfall-action-entry-row shortfall-action-entry-row--cannibalise">
+      <Form.Item
+        name={[field.name, 'qty']}
+        dependencies={[['cannibaliseEntries', field.name, 'tailNumber']]}
+        rules={[
+          { required: true, message: 'Qty' },
+          ({ getFieldValue }) => ({
+            validator: (_, value) => {
+              const selected = getFieldValue(['cannibaliseEntries', field.name, 'tailNumber']);
+              const tailOption = tailOptions.find((option) => option.tailNo === selected);
+              if (!tailOption || value == null) return Promise.resolve();
+              if (value > tailOption.qpa) {
+                return Promise.reject(new Error(`Max QPA: ${tailOption.qpa}`));
+              }
+              return Promise.resolve();
+            },
+          }),
+        ]}
+        className="shortfall-action-entry-qty"
+      >
+        <InputNumber
+          min={1}
+          max={qtyMax}
+          placeholder="Qty"
+          disabled={!selectedTail}
+        />
+      </Form.Item>
+      <Form.Item
+        name={[field.name, 'tailNumber']}
+        rules={[{ required: true, message: 'Select tail' }]}
+        className="shortfall-action-entry-tail"
+      >
+        <Select
+          placeholder="Tail no. | ETR | QPA"
+          optionFilterProp="label"
+          options={tailOptions.map((option) => ({
+            value: option.tailNo,
+            label: formatCannibaliseTailLabel(option),
+          }))}
+          onChange={(newTailNo) => {
+            const tailOption = tailOptions.find((option) => option.tailNo === newTailNo);
+            const qty = form.getFieldValue(['cannibaliseEntries', field.name, 'qty']);
+            if (tailOption && qty != null && qty > tailOption.qpa) {
+              form.setFieldValue(['cannibaliseEntries', field.name, 'qty'], tailOption.qpa);
+            }
+          }}
+        />
+      </Form.Item>
+      {showRemove && (
+        <Button
+          type="text"
+          icon={<MinusCircleOutlined />}
+          aria-label="Remove aircraft"
+          onClick={onRemove}
+        />
+      )}
+    </div>
+  );
 }
 
 function ShortfallActionQtyField({
@@ -190,11 +278,6 @@ export default function EditLineDrawer({
 }: EditLineDrawerProps) {
   const [form] = Form.useForm();
   const toBringQty = Form.useWatch('toBringQty', form);
-  const acceptQty = Form.useWatch('acceptQty', form);
-  const waitEntries = Form.useWatch('waitEntries', form) as WaitEntryFormValue[] | undefined;
-  const cannibaliseEntries = Form.useWatch('cannibaliseEntries', form) as
-    | CannibaliseEntryFormValue[]
-    | undefined;
   const shortfallActionTypes = Form.useWatch('shortfallActionTypes', form) as
     | ShortfallActionType[]
     | undefined;
@@ -210,15 +293,10 @@ export default function EditLineDrawer({
       );
       const defaultQty = getShortfallQty(line) || 1;
 
-      const groupAvail = getGroupAvailableQty(line);
-      const isShortfall = groupAvail < line.requiredQty;
-      const defaultToBring = isShortfall
-        ? computeToBringQty(line, line.shortfallActions)
-        : line.toBringQty;
-
       form.setFieldsValue({
-        toBringQty: defaultToBring,
+        toBringQty: line.toBringQty,
         deviationReason: line.deviationReason,
+        deviationRemarks: line.deviationRemarks,
         shortfallTargetNsn:
           waitActions[0]?.targetNsn ??
           acceptAction?.targetNsn ??
@@ -232,94 +310,103 @@ export default function EditLineDrawer({
           waitActions.length > 0
             ? waitActions.map((action) => ({
                 qty: action.qty,
-                edd: dayjs(action.needByDate, 'YYYY-MM-DD'),
+                orderId: action.supplyOrders?.[0]?.id,
               }))
-            : [{ qty: defaultQty, edd: dayjs(planNeedByDate, 'YYYY-MM-DD') }],
+            : [{ qty: defaultQty, orderId: undefined }],
         waitRemarks: waitActions[0]?.remarks ?? '',
         cannibaliseEntries:
           cannActions.length > 0
             ? cannActions.map((action) => ({
                 qty: action.qty,
-                tail: formatAircraftTailNumber(action.tailNumber),
+                tailNumber: formatAircraftTailNumber(action.tailNumber),
               }))
-            : [{ qty: defaultQty, tail: '' }],
+            : [{ qty: defaultQty, tailNumber: undefined }],
         cannComments: cannActions[0]?.workCentreComments ?? '',
       });
     }
   }, [line, open, form, planNeedByDate]);
 
-  const currentToBring = toBringQty ?? line?.toBringQty ?? 0;
-  const lineMode = line ? resolveLineMode(line, currentToBring) : null;
-
   useEffect(() => {
-    if (!line || !open || lineMode !== 'shortfall') return;
+    if (!line || !open) return;
+    const currentToBring = toBringQty ?? line.toBringQty;
+    const preview = previewLine(line, currentToBring);
+    if (canAcceptShortfall(preview)) return;
 
-    const actionTypes = shortfallActionTypes ?? [];
-    const derivedToBring = computeToBringQty(
-      line,
-      buildShortfallActionsFromForm(
-        line,
-        {
-          shortfallActionTypes: actionTypes,
-          acceptQty,
-          waitEntries,
-          cannibaliseEntries,
-        },
-        planNeedByDate,
-      ),
-    );
-
-    if (derivedToBring !== toBringQty) {
-      form.setFieldValue('toBringQty', derivedToBring);
+    const types = form.getFieldValue('shortfallActionTypes') as ShortfallActionType[] | undefined;
+    if (types?.includes('accept')) {
+      form.setFieldValue(
+        'shortfallActionTypes',
+        types.filter((type) => type !== 'accept'),
+      );
     }
-  }, [
-    line,
-    open,
-    lineMode,
-    shortfallActionTypes,
-    acceptQty,
-    waitEntries,
-    cannibaliseEntries,
-    toBringQty,
-    form,
-    planNeedByDate,
-  ]);
+  }, [line, open, toBringQty, form]);
+
+  const supplyOrderOptions = useMemo(
+    () => (line ? getAwaitingSupplyOrderOptions(line) : []),
+    [line],
+  );
+  const cannibaliseTailOptions = useMemo(
+    () => (line ? getCannibaliseTailOptions(line) : []),
+    [line],
+  );
 
   if (!line) return null;
 
   const isGroup = isInterchangeableLine(line);
   const groupAvailable = getGroupAvailableQty(line);
   const currentToBringResolved = toBringQty ?? line.toBringQty;
-  const lineStatus = resolveLineStatus(line, currentToBringResolved);
-  const shortfallQty = getShortfallQty(line);
+  const linePreview = previewLine(line, currentToBringResolved);
+  const shortfallQty = getShortfallQty(linePreview);
   const selectedActions = shortfallActionTypes ?? [];
-  const toBringReadOnly = lineMode === 'shortfall';
-  const showDeviationHint = lineMode === null && canDeviateQty(line);
-  const revertingDeviation =
-    lineMode === null &&
+  const showShortfallPanel = hasShortfallCondition(linePreview);
+  const showDeviationFields = hasDeviationCondition(linePreview);
+  const acceptShortfallDisabled = showShortfallPanel && !canAcceptShortfall(linePreview);
+  const deviationUp =
+    line.isAddedNsn || (showDeviationFields && currentToBringResolved > line.requiredQty);
+  const deviationDown =
+    !line.isAddedNsn && showDeviationFields && currentToBringResolved < line.requiredQty;
+  const showDeviationHint = isLineFulfilled(line) && canDeviateQty(line);
+  const revertingToFulfilled =
+    !isLineFulfilled(line) &&
     !line.isAddedNsn &&
-    line.toBringQty > line.requiredQty &&
-    currentToBringResolved === line.requiredQty;
-  const toBringMin =
-    lineMode === 'shortfall'
-      ? 0
-      : line.isAddedNsn
-        ? line.requiredQty + 1
-        : lineMode === 'deviation' || line.toBringQty > line.requiredQty
-          ? line.requiredQty
-          : 0;
+    isLineFulfilled(previewLine(line, currentToBringResolved));
+  const toBringMin = line.isAddedNsn
+    ? line.requiredQty + 1
+    : deviationUp
+      ? line.requiredQty + 1
+      : 0;
 
   const handleSave = async () => {
     try {
       const values = await form.validateFields();
       const actionTypes: ShortfallActionType[] = values.shortfallActionTypes ?? [];
       const shortfallTargetNsn = values.shortfallTargetNsn as string | undefined;
-      const mode = resolveLineMode(line, values.toBringQty ?? line.toBringQty);
+      const nextToBringQty = values.toBringQty ?? line.toBringQty;
+      const savedPreview = previewLine(line, nextToBringQty);
+      const needsShortfall = hasShortfallCondition(savedPreview);
+      const needsDeviation = hasDeviationCondition(savedPreview);
 
-      if (mode === 'shortfall') {
+      if (needsShortfall) {
+        if (
+          actionTypes.includes('accept') &&
+          !canAcceptShortfall(savedPreview)
+        ) {
+          message.error(
+            'Accept shortfall is not available when to-bring exceeds both required and available stock',
+          );
+          return;
+        }
+
         if (actionTypes.includes('wait') && (values.waitEntries?.length ?? 0) === 0) {
           message.error('Add at least one order for awaiting supply');
           return;
+        }
+
+        for (const entry of values.waitEntries ?? []) {
+          if (!entry?.orderId) {
+            message.error('Each awaiting supply row requires an order');
+            return;
+          }
         }
 
         if (actionTypes.includes('cannibalise') && (values.cannibaliseEntries?.length ?? 0) === 0) {
@@ -327,33 +414,29 @@ export default function EditLineDrawer({
           return;
         }
 
-        for (const entry of values.waitEntries ?? []) {
-          if (!entry?.edd) {
-            message.error('Each awaiting supply entry requires an EDD');
-            return;
-          }
-        }
-
         for (const entry of values.cannibaliseEntries ?? []) {
-          if (!isValidAircraftTailNumber(entry?.tail ?? '')) {
-            message.error('Each cannibalise entry requires a 3–4 digit aircraft tail number');
+          if (!entry?.tailNumber) {
+            message.error('Each cannibalise row requires an aircraft tail number');
+            return;
+          }
+          const tailOption = cannibaliseTailOptions.find(
+            (option) => option.tailNo === entry.tailNumber,
+          );
+          if (tailOption && (entry.qty ?? 0) > tailOption.qpa) {
+            message.error(
+              `Qty cannot exceed QPA (${tailOption.qpa}) installed on tail ${tailOption.tailNo}`,
+            );
             return;
           }
         }
       }
 
-      const shortfallActions: ShortfallAction[] =
-        mode === 'shortfall' ? buildShortfallActionsFromForm(line, values, planNeedByDate) : [];
+      const shortfallActions: ShortfallAction[] = needsShortfall
+        ? buildShortfallActionsFromForm(line, values, planNeedByDate)
+        : [];
 
-      const nextToBringQty =
-        mode === 'shortfall'
-          ? computeToBringQty(line, shortfallActions)
-          : (values.toBringQty ?? line.requiredQty);
-
-      if (mode !== 'shortfall' && nextToBringQty > groupAvailable) {
-        message.error(`To-bring cannot exceed available qty (${groupAvailable})`);
-        return;
-      }
+      const savedDeviationUp = line.isAddedNsn || nextToBringQty > line.requiredQty;
+      const savedDeviationDown = !line.isAddedNsn && nextToBringQty < line.requiredQty;
 
       const updated: PlanLine = {
         ...line,
@@ -363,9 +446,19 @@ export default function EditLineDrawer({
         deviationApproved: undefined,
       };
 
-      if (mode === 'deviation') {
-        updated.deviationReason = values.deviationReason;
-        updated.deviationRemarks = undefined;
+      if (needsDeviation) {
+        if (savedDeviationUp && !values.deviationReason?.trim()) {
+          message.error('Enter a deviation reason');
+          return;
+        }
+        if (savedDeviationDown && !values.deviationRemarks?.trim()) {
+          message.error('Enter remarks explaining the reduced to-bring qty');
+          return;
+        }
+        updated.deviationReason =
+          savedDeviationUp ? values.deviationReason?.trim() : undefined;
+        updated.deviationRemarks =
+          savedDeviationDown ? values.deviationRemarks?.trim() : undefined;
       } else {
         updated.deviationReason = undefined;
         updated.deviationRemarks = undefined;
@@ -402,12 +495,7 @@ export default function EditLineDrawer({
         NSN: {line.nsn}
       </Typography.Text>
 
-      <Tag
-        color={STATUS_TAG_COLORS[lineStatus]}
-        className="edit-line-status-tag"
-      >
-        {formatLineStatus(lineStatus)}
-      </Tag>
+      <LineStatusTags line={linePreview} />
 
       <Form form={form} layout="vertical">
         <div className="edit-line-qty-row-section">
@@ -427,67 +515,64 @@ export default function EditLineDrawer({
               <Typography.Text className="edit-line-qty-cell-label">Available</Typography.Text>
               <Typography.Text className="edit-line-qty-cell-value">{groupAvailable}</Typography.Text>
             </div>
-            <div className="edit-line-qty-cell edit-line-qty-cell--input">
+            <div
+              className={`edit-line-qty-cell edit-line-qty-cell--input${
+                currentToBringResolved > groupAvailable ? ' edit-line-qty-cell--warning' : ''
+              }`}
+            >
               <Typography.Text className="edit-line-qty-cell-label">To-bring</Typography.Text>
               <Form.Item
                 name="toBringQty"
-                rules={[
-                  { required: true, message: 'Enter to-bring quantity' },
-                  ...(lineMode !== 'shortfall'
-                    ? [
-                        {
-                          validator: (_: unknown, value: number | null) => {
-                            if (value == null || value <= groupAvailable) {
-                              return Promise.resolve();
-                            }
-                            return Promise.reject(
-                              new Error(
-                                `To-bring cannot exceed available qty (${groupAvailable})`,
-                              ),
-                            );
-                          },
-                        },
-                      ]
-                    : []),
-                ]}
+                rules={[{ required: true, message: 'Enter to-bring quantity' }]}
                 style={{ marginBottom: 0 }}
               >
-                <InputNumber
-                  min={toBringMin}
-                  max={lineMode !== 'shortfall' ? groupAvailable : undefined}
-                  readOnly={toBringReadOnly}
-                  disabled={toBringReadOnly}
-                  className="edit-line-qty-cell-input"
-                />
+                <InputNumber min={toBringMin} className="edit-line-qty-cell-input" />
               </Form.Item>
             </div>
           </div>
         </div>
 
-        {lineMode === 'deviation' && (
+        {deviationUp && (
           <Form.Item
             name="deviationReason"
             label="Reason"
             rules={[{ required: true, message: 'Enter a deviation reason' }]}
           >
-            <Input.TextArea rows={3} placeholder="Describe why to-bring qty exceeds required qty" />
+            <Input.TextArea
+              rows={3}
+              placeholder="Describe why to-bring qty exceeds the L-series requirement"
+            />
           </Form.Item>
         )}
 
-        {revertingDeviation && (
+        {deviationDown && (
+          <Form.Item
+            name="deviationRemarks"
+            label="Remarks"
+            rules={[{ required: true, message: 'Enter remarks for the reduced to-bring qty' }]}
+          >
+            <Input.TextArea
+              rows={3}
+              placeholder="Explain why you are bringing less than the L-series requirement"
+            />
+          </Form.Item>
+        )}
+
+        {revertingToFulfilled && (
           <Typography.Text type="secondary">
-            To-bring matches the required qty — this line will be marked as fulfilled when saved.
+            To-bring matches required and available stock — this line will be fulfilled when saved.
           </Typography.Text>
         )}
 
-        {lineMode === 'shortfall' && (
+        {showShortfallPanel && (
           <div className="shortfall-resolution-panel">
             <Typography.Text strong className="shortfall-resolution-title">
               Choose a resolution path
             </Typography.Text>
             <Typography.Text type="secondary" className="shortfall-resolution-subtitle">
-              Select one or more paths when ready, or save unresolved if undecided. Total shortfall:{' '}
+              To-bring exceeds available stock — resolve the gap of{' '}
               <Typography.Text strong>{shortfallQty}</Typography.Text>
+              {showDeviationFields ? ' and record the deviation below.' : ' before proceeding.'}
             </Typography.Text>
 
             {isGroup && (
@@ -520,10 +605,19 @@ export default function EditLineDrawer({
                   <div
                     className={`shortfall-action-block${
                       selectedActions.includes('accept') ? ' shortfall-action-block--selected' : ''
-                    }`}
+                    }${acceptShortfallDisabled ? ' shortfall-action-block--disabled' : ''}`}
                   >
                     <div className="shortfall-action-row">
-                      <Checkbox value="accept">Accept shortfall</Checkbox>
+                      <div className="shortfall-action-row-main">
+                        <Checkbox value="accept" disabled={acceptShortfallDisabled}>
+                          Accept shortfall
+                        </Checkbox>
+                        <Typography.Text type="secondary" className="shortfall-action-description">
+                          {acceptShortfallDisabled
+                            ? 'Not available when to-bring exceeds the L-series requirement — reduce to-bring or choose another resolution'
+                            : 'Proceed with the mission despite this shortfall'}
+                        </Typography.Text>
+                      </div>
                       <ShortfallActionQtyField
                         actionType="accept"
                         fieldName="acceptQty"
@@ -559,7 +653,10 @@ export default function EditLineDrawer({
                           {(fields, { add, remove }) => (
                             <>
                               {fields.map((field) => (
-                                <div key={field.key} className="shortfall-action-entry-row">
+                                <div
+                                  key={field.key}
+                                  className="shortfall-action-entry-row shortfall-action-entry-row--wait"
+                                >
                                   <Form.Item
                                     name={[field.name, 'qty']}
                                     rules={[{ required: true, message: 'Qty' }]}
@@ -572,11 +669,18 @@ export default function EditLineDrawer({
                                     />
                                   </Form.Item>
                                   <Form.Item
-                                    name={[field.name, 'edd']}
-                                    rules={[{ required: true, message: 'EDD' }]}
-                                    className="shortfall-action-entry-edd"
+                                    name={[field.name, 'orderId']}
+                                    rules={[{ required: true, message: 'Select order' }]}
+                                    className="shortfall-action-entry-orders"
                                   >
-                                    <DatePicker format="D MMM YYYY" placeholder="EDD" />
+                                    <Select
+                                      placeholder="Qty | PO no. | EDD | Serial no"
+                                      optionFilterProp="label"
+                                      options={supplyOrderOptions.map((order) => ({
+                                        value: order.id,
+                                        label: formatAwaitingSupplyOrderLabel(order),
+                                      }))}
+                                    />
                                   </Form.Item>
                                   {fields.length > 1 && (
                                     <Button
@@ -591,12 +695,7 @@ export default function EditLineDrawer({
                               <Button
                                 type="dashed"
                                 icon={<PlusOutlined />}
-                                onClick={() =>
-                                  add({
-                                    qty: 1,
-                                    edd: dayjs(planNeedByDate, 'YYYY-MM-DD'),
-                                  })
-                                }
+                                onClick={() => add({ qty: 1, orderId: undefined })}
                                 block
                                 className="shortfall-action-add-entry"
                               >
@@ -633,49 +732,20 @@ export default function EditLineDrawer({
                           {(fields, { add, remove }) => (
                             <>
                               {fields.map((field) => (
-                                <div key={field.key} className="shortfall-action-entry-row">
-                                  <Form.Item
-                                    name={[field.name, 'qty']}
-                                    rules={[{ required: true, message: 'Qty' }]}
-                                    className="shortfall-action-entry-qty"
-                                  >
-                                    <InputNumber
-                                      min={1}
-                                      max={shortfallQty || undefined}
-                                      placeholder="Qty"
-                                    />
-                                  </Form.Item>
-                                  <Form.Item
-                                    name={[field.name, 'tail']}
-                                    rules={[
-                                      { required: true, message: 'Tail #' },
-                                      {
-                                        pattern: /^\d{3,4}$/,
-                                        message: '3–4 digits',
-                                      },
-                                    ]}
-                                    className="shortfall-action-entry-tail"
-                                  >
-                                    <Input
-                                      placeholder="Tail #"
-                                      maxLength={4}
-                                      inputMode="numeric"
-                                    />
-                                  </Form.Item>
-                                  {fields.length > 1 && (
-                                    <Button
-                                      type="text"
-                                      icon={<MinusCircleOutlined />}
-                                      aria-label="Remove aircraft"
-                                      onClick={() => remove(field.name)}
-                                    />
-                                  )}
-                                </div>
+                                <CannibaliseEntryRow
+                                  key={field.key}
+                                  field={field}
+                                  form={form}
+                                  tailOptions={cannibaliseTailOptions}
+                                  shortfallQty={shortfallQty}
+                                  showRemove={fields.length > 1}
+                                  onRemove={() => remove(field.name)}
+                                />
                               ))}
                               <Button
                                 type="dashed"
                                 icon={<PlusOutlined />}
-                                onClick={() => add({ qty: 1, tail: '' })}
+                                onClick={() => add({ qty: 1, tailNumber: undefined })}
                                 block
                                 className="shortfall-action-add-entry"
                               >
@@ -696,20 +766,20 @@ export default function EditLineDrawer({
           </div>
         )}
 
-        {lineMode === null && showDeviationHint && (
+        {showDeviationHint && (
           <div className="deviation-available-panel">
             <Typography.Text strong className="deviation-available-panel-title">
               Record a deviation
             </Typography.Text>
             <Typography.Text type="secondary">
-              Available stock ({groupAvailable}) exceeds the L-series requirement ({line.requiredQty}
-              ). Increase to-bring above {line.requiredQty} and provide a reason — the line will
-              appear in the approval pack for offline sign-off.
+              Available stock ({groupAvailable}) covers to-bring. Adjust above or below required (
+              {line.requiredQty}) to record a deviation — if to-bring exceeds available the line
+              also becomes a shortfall.
             </Typography.Text>
           </div>
         )}
 
-        {lineMode === null && !showDeviationHint && (
+        {isLineFulfilled(linePreview) && !showDeviationHint && !showShortfallPanel && !showDeviationFields && (
           <Typography.Text type="secondary">
             This line is fulfilled — no further action required.
           </Typography.Text>

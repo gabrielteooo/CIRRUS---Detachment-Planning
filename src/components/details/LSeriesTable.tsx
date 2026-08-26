@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Button, Card, Input, Popconfirm, Select, Space, Table, Tag, Typography } from 'antd';
+import { Button, Card, Input, Popconfirm, Select, Space, Table, Typography } from 'antd';
 import { PlusOutlined, SearchOutlined } from '@ant-design/icons';
-import type { PlanLine, ComponentCategory } from '../../types/planLine';
+import type { ComponentCategory, LineStatus, PlanLine } from '../../types/planLine';
 import {
-  formatLineStatus,
   getCategoryFulfillmentSummary,
   getLineActionLabel,
-  getLineStatus,
+  getLineStatuses,
 } from '../../types/planLine';
+import LineStatusTags from './LineStatusTags';
 import type { Platform } from '../../types/detachment';
 import { COMPONENT_CATEGORIES } from '../../data/lSeriesTemplate';
 import {
@@ -31,16 +31,9 @@ interface LSeriesTableProps {
   viewOnly: boolean;
   onEditLine: (line: PlanLine) => void;
   onViewInventory: (line: PlanLine) => void;
-  onViewNsn: (line: PlanLine) => void;
   onAddNsn?: () => void;
   onDeleteLine?: (line: PlanLine) => void;
 }
-
-const STATUS_COLORS: Record<string, string> = {
-  Met: 'success',
-  Deviation: 'warning',
-  Shortfall: 'error',
-};
 
 const CATEGORY_CARD_LABELS: Record<ComponentCategory, string> = {
   LRU: 'LRU',
@@ -66,7 +59,6 @@ export default function LSeriesTable({
   viewOnly,
   onEditLine,
   onViewInventory,
-  onViewNsn,
   onAddNsn,
   onDeleteLine,
 }: LSeriesTableProps) {
@@ -99,7 +91,9 @@ export default function LSeriesTable({
   const filtered = useMemo(() => {
     let result = searchFilteredLines.filter((line) => lineMatchesCategory(line, activeCategory));
     if (statusFilter !== 'all') {
-      result = result.filter((line) => getLineStatus(line) === statusFilter);
+      result = result.filter((line) =>
+        getLineStatuses(line).includes(statusFilter as LineStatus),
+      );
     }
     return result;
   }, [searchFilteredLines, activeCategory, statusFilter]);
@@ -109,10 +103,7 @@ export default function LSeriesTable({
       title: 'Status',
       key: 'status',
       width: STATUS_COLUMN_WIDTH,
-      render: (_: unknown, record: PlanLine) => {
-        const status = getLineStatus(record);
-        return <Tag color={STATUS_COLORS[status]}>{formatLineStatus(status)}</Tag>;
-      },
+      render: (_: unknown, record: PlanLine) => <LineStatusTags line={record} />,
     },
     {
       title: 'Action',
@@ -164,7 +155,6 @@ export default function LSeriesTable({
         activeCategory as Extract<ComponentCategory, 'LRU' | 'Consumable'>,
         platform,
         variant,
-        onViewNsn,
         onViewInventory,
         activeColumnVisibility,
       )

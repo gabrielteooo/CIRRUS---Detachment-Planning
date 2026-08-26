@@ -1,3 +1,4 @@
+import dayjs from 'dayjs';
 import type { PlanLine } from '../types/planLine';
 import { formatDate } from '../utils/planUtils';
 
@@ -74,6 +75,23 @@ function slocFromLocation(location: string, index: number): string {
   return index % 2 === 0 ? 'SL01' : 'SL02';
 }
 
+/** Demo EDD mix: ~1/3 Cannibalise (both late), ~2/3 Wait (repair or new buy meets need-by). */
+function supplyEddProfile(nsn: string): { repairEddIso: string; newBuyEddIso: string } {
+  const late = '2026-09-26';
+  const earlyRepair = '2026-02-20';
+  const earlyNewBuy = '2026-02-25';
+  const bucket = nsn.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0) % 3;
+
+  switch (bucket) {
+    case 0:
+      return { repairEddIso: late, newBuyEddIso: late };
+    case 1:
+      return { repairEddIso: earlyRepair, newBuyEddIso: late };
+    default:
+      return { repairEddIso: late, newBuyEddIso: earlyNewBuy };
+  }
+}
+
 export function getStorageLocationRows(line: PlanLine): StorageLocationRow[] {
   if (line.inventory.length === 0) {
     return [
@@ -136,6 +154,8 @@ export function getOnAircraftRows(line: PlanLine): OnAircraftRow[] {
 export function getNewBuyRows(line: PlanLine): NewBuyRow[] {
   const statuses: NewBuyStatus[] = ['PR Release', 'PO Release', 'Delivered', 'PO Release'];
   const airwayBills = ['158-12345678', '', '158-87654321', ''];
+  const { newBuyEddIso } = supplyEddProfile(line.nsn);
+  const eddByRow = [newBuyEddIso, '2026-10-15', '2026-11-01', '2026-12-05'];
 
   return statuses.map((status, index) => ({
     id: `${line.nsn}-newbuy-${index}`,
@@ -147,7 +167,7 @@ export function getNewBuyRows(line: PlanLine): NewBuyRow[] {
     prDate: formatDate('2026-01-05'),
     poDate: formatDate('2026-01-05'),
     qty: (index + 1) * 10,
-    edd: formatDate('2026-02-05'),
+    edd: formatDate(eddByRow[index] ?? newBuyEddIso),
     sdd: formatDate('2026-02-05'),
     vendor: 'ST Logistics',
     airwayBill: airwayBills[index] ?? '',
@@ -179,6 +199,8 @@ export function getRepairRows(line: PlanLine): RepairRow[] {
   const statuses: RepairStatus[] = ['Sent out', 'Repair done', 'Delivered', 'Delivered'];
   const prNumbers = ['123456789', '123456780', '123456789', '123456789'];
   const poNumbers = ['987654321', '987654322', '987654321', '987654321'];
+  const { repairEddIso } = supplyEddProfile(line.nsn);
+  const eddByRow = [repairEddIso, '2026-10-20', '2026-11-10', '2026-12-01'];
 
   return statuses.map((status, index) => ({
     id: `${line.nsn}-repair-${index}`,
@@ -189,11 +211,75 @@ export function getRepairRows(line: PlanLine): RepairRow[] {
     prDate: formatDate('2025-01-05'),
     poDate: formatDate('2025-01-05'),
     qty: 1,
-    edd: formatDate('2025-01-25'),
+    edd: formatDate(eddByRow[index] ?? repairEddIso),
     sdd: formatDate('2025-02-25'),
     vendor: 'ST Logistics',
     airwayBill: '158-12345678',
     agingDays: (index + 1) * 30,
     timeSincePrRaisedDays: (index + 1) * 30,
   }));
+}
+
+export interface AwaitingSupplyOrderOption {
+  id: string;
+  qty: number;
+  poNumber: string;
+  edd: string;
+  serialNo?: string;
+  source: 'repair' | 'newBuy';
+}
+
+function parseRowEdd(edd: string): string {
+  return dayjs(edd, 'D MMM YYYY').format('YYYY-MM-DD');
+}
+
+export function formatAwaitingSupplyOrderLabel(option: AwaitingSupplyOrderOption): string {
+  const serial = option.serialNo?.trim() ? option.serialNo : '—';
+  return `${option.qty} | ${option.poNumber} | ${formatDate(option.edd)} | ${serial}`;
+}
+
+export function getAwaitingSupplyOrderOptions(line: PlanLine): AwaitingSupplyOrderOption[] {
+  const repairOptions: AwaitingSupplyOrderOption[] = getRepairRows(line).map((row) => ({
+    id: row.id,
+    qty: row.qty,
+    poNumber: row.poNo,
+    edd: parseRowEdd(row.edd),
+    serialNo: row.serialNo,
+    source: 'repair' as const,
+  }));
+
+  const newBuyOptions: AwaitingSupplyOrderOption[] = getNewBuyRows(line).map((row) => ({
+    id: row.id,
+    qty: row.qty,
+    poNumber: row.poNo,
+    edd: parseRowEdd(row.edd),
+    source: 'newBuy' as const,
+  }));
+
+  return [...repairOptions, ...newBuyOptions];
+}
+
+export interface CannibaliseTailOption {
+  tailNo: string;
+  etr: string;
+  qpa: number;
+}
+
+export function formatCannibaliseTailLabel(option: CannibaliseTailOption): string {
+  return `${option.tailNo} | ${formatDate(option.etr)} | QPA: ${option.qpa}`;
+}
+
+export function getCannibaliseTailOptions(line: PlanLine): CannibaliseTailOption[] {
+  const qpaBase = (line.nsn.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0) % 3) + 1;
+
+  const options: CannibaliseTailOption[] = [
+    { tailNo: '9876', etr: '2026-11-20', qpa: qpaBase },
+    { tailNo: '3012', etr: '2026-09-30', qpa: Math.max(1, qpaBase - 1) || 1 },
+    { tailNo: '982', etr: '2026-08-15', qpa: qpaBase + 1 },
+    { tailNo: '2041', etr: '2026-06-10', qpa: qpaBase },
+  ];
+
+  return options.sort(
+    (left, right) => dayjs(right.etr).valueOf() - dayjs(left.etr).valueOf(),
+  );
 }

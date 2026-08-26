@@ -5,6 +5,7 @@ import type { Platform, PlatformPlan } from '../types/detachment';
 import type { LSeriesRecord } from '../types/lSeries';
 import type { InventoryItem, PlanLine } from '../types/planLine';
 import {
+  getDefaultToBringQty,
   getGroupAvailableQty,
   getLineStatus,
   isPolLine,
@@ -13,6 +14,7 @@ import {
   L_SERIES_TEMPLATE,
   componentAppliesToVariant,
   getPolRequiredQty,
+  resolveParameterTier,
   type ComponentCategory,
   type LSComponent,
   type LSPlatformTemplate,
@@ -178,7 +180,8 @@ function computeRequiredQtyByNsn(
     });
   };
 
-  const parameterTier = plan.variantRows[0]?.parameterTier ?? 0;
+  const rawParameterTier = plan.variantRows[0]?.parameterTier ?? 0;
+  const parameterTier = resolveParameterTier(plan.platform, rawParameterTier);
 
   for (const component of template.components) {
     if (component.category === 'POL') continue;
@@ -221,7 +224,7 @@ export function buildPlanLinesFromTemplate(
       description,
       requiredQty,
       availableQty,
-      toBringQty: isPol ? 0 : requiredQty,
+      toBringQty: getDefaultToBringQty(requiredQty),
       inventory,
       shortfallActions: [],
       componentCategory: category,
@@ -250,7 +253,7 @@ function buildPolPlanLine(lineId: string, component: LSComponent): PlanLine {
     description: component.description,
     requiredQty,
     availableQty: requiredQty,
-    toBringQty: 0,
+    toBringQty: getDefaultToBringQty(requiredQty),
     inventory: buildInventory(component.nsn, component.description, requiredQty),
     shortfallActions: [],
     componentCategory: 'POL',
@@ -371,12 +374,10 @@ export function applyDemoScenario(planId: string, lines: PlanLine[]): PlanLine[]
   });
 
   patch('3950-74-8216', {
-    toBringQty: 0,
     remarks: 'Include in deployment POL kit',
   });
 
   patch('1597-36-2840', {
-    toBringQty: 0,
     remarks: 'Include MSDS folder',
   });
 

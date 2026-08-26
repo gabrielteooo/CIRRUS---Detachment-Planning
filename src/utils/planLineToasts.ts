@@ -1,8 +1,9 @@
 import { message as staticMessage } from 'antd';
 import type { MessageInstance } from 'antd/es/message/interface';
 import {
-  getLineStatus,
   hasResolutionRecorded,
+  hasShortfallCondition,
+  hasDeviationCondition,
   type PlanLine,
 } from '../types/planLine';
 
@@ -54,10 +55,8 @@ export function showPlanLineSaveToast(
 ) {
   if (!before) return;
 
-  const status = getLineStatus(after);
-
   if (
-    status === 'Shortfall' &&
+    hasShortfallCondition(after) &&
     after.shortfallActions.length > 0 &&
     before.shortfallActions.length === 0
   ) {
@@ -66,7 +65,7 @@ export function showPlanLineSaveToast(
   }
 
   if (
-    status === 'Deviation' &&
+    hasDeviationCondition(after) &&
     hasResolutionRecorded(after) &&
     !hasResolutionRecorded(before)
   ) {

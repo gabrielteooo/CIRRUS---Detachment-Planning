@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { Button, Drawer, Form, Input, InputNumber, Tag, Typography } from 'antd';
 import type { LineStatus, PlanLine } from '../../types/planLine';
-import { formatLineStatus, getPolLineStatus } from '../../types/planLine';
+import { formatLineStatus, getDefaultToBringQty, getPolLineStatus } from '../../types/planLine';
 
 interface EditPolLineDrawerProps {
   line: PlanLine | null;
@@ -28,7 +28,7 @@ export default function EditPolLineDrawer({
   useEffect(() => {
     if (line && open) {
       form.setFieldsValue({
-        toBringQty: line.toBringQty,
+        toBringQty: line.toBringQty ?? getDefaultToBringQty(line.requiredQty),
         remarks: line.remarks ?? '',
         deviationReason: line.deviationReason ?? '',
       });

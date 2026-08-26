@@ -19,11 +19,12 @@ export const DETACHMENT_TYPE_OPTIONS: DetachmentType[] = [
   'Near Sail',
 ];
 
-/** Director-created exercise container — name and date only. */
+/** Director-created exercise container — name and date range. */
 export interface Detachment {
   id: string;
   name: string;
-  detachmentDate: string;
+  detachmentDateStart: string;
+  detachmentDateEnd: string;
   createdBy: string;
   createdByName: string;
   lastUpdated: string;
@@ -44,6 +45,12 @@ export interface PlatformPlan {
   detachmentType: DetachmentType;
   lSeriesId: string;
   needByDate: string;
+  /** Planner-defined date range within the parent detachment window. */
+  planDateStart: string;
+  planDateEnd: string;
+  aircraftCount: number;
+  /** F-16 only — combined flying hours across selected aircraft. */
+  flyingHours?: number;
   variantRows: PlanVariantRow[];
   status: PlanStatus;
   fillRatePercent: number;

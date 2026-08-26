@@ -1,6 +1,6 @@
 import { Badge, Collapse, Table, Typography } from 'antd';
 import type { PlanLine } from '../../types/planLine';
-import { getLineStatus } from '../../types/planLine';
+import { hasDeviationCondition, formatDeviationResolution } from '../../types/planLine';
 import type { Platform } from '../../types/detachment';
 import {
   getNsnMpnDescriptionColumns,
@@ -22,7 +22,6 @@ interface DeviationSummaryProps {
   viewOnly: boolean;
   onEditLine: (line: PlanLine) => void;
   onViewInventory: (line: PlanLine) => void;
-  onViewNsn: (line: PlanLine) => void;
 }
 
 function DeviationHeader({ count }: { count: number }) {
@@ -47,24 +46,23 @@ export default function DeviationSummary({
   viewOnly,
   onEditLine,
   onViewInventory,
-  onViewNsn,
 }: DeviationSummaryProps) {
-  const deviationLines = lines.filter((l) => getLineStatus(l) === 'Deviation');
+  const deviationLines = lines.filter((l) => hasDeviationCondition(l));
 
   if (deviationLines.length === 0) return null;
 
   const columns = [
-    ...getNsnMpnDescriptionColumns<PlanLine>(onViewNsn),
+    ...getNsnMpnDescriptionColumns<PlanLine>(),
     getPlatformVariantColumn<PlanLine>(platform, variant),
     getRequiredColumn<PlanLine>(),
     getAvailableColumn<PlanLine>(getAvailableColumnLinkRenderer(onViewInventory)),
     getSummaryToBringColumn<PlanLine>(),
     {
-      title: 'Reason',
-      dataIndex: 'deviationReason',
+      title: 'Reason / Remarks',
+      key: 'deviationResolution',
       width: FLEX_TEXT_COLUMN_MIN_WIDTH,
       ellipsis: true,
-      render: (v: string) => v ?? '—',
+      render: (_: unknown, record: PlanLine) => formatDeviationResolution(record),
     },
     getSummaryEditColumn<PlanLine>(viewOnly, onEditLine),
   ];

@@ -1,11 +1,14 @@
-import { Drawer, Table, Typography } from 'antd';
+import { Drawer, Table, Tag, Typography } from 'antd';
 import type { PlanLine } from '../../types/planLine';
 import { getGroupAvailableQty, isInterchangeableLine } from '../../types/planLine';
+import { formatDate } from '../../utils/planUtils';
+import { assessSupply } from '../../utils/supplyAssessment';
 import { QTY_COLUMN_WIDTH } from './nsnTableColumns';
 
 interface InventoryDrawerProps {
   line: PlanLine | null;
   open: boolean;
+  sparesRequiredBy: string;
   onClose: () => void;
 }
 
@@ -40,11 +43,22 @@ function getDisplayDescription(line: PlanLine): string {
   return line.description.replace(/\s*\(interchangeable[^)]*\)/i, '').trim();
 }
 
-export default function InventoryDrawer({ line, open, onClose }: InventoryDrawerProps) {
+const RECOMMENDATION_COLORS = {
+  Cannibalise: 'error',
+  'Wait for Repair / New buys': 'processing',
+} as const;
+
+export default function InventoryDrawer({
+  line,
+  open,
+  sparesRequiredBy,
+  onClose,
+}: InventoryDrawerProps) {
   if (!line) return null;
 
   const availableQty = getGroupAvailableQty(line);
   const rows = buildInventoryRows(line);
+  const assessment = assessSupply(line, sparesRequiredBy);
 
   const columns = [
     {
@@ -63,7 +77,7 @@ export default function InventoryDrawer({ line, open, onClose }: InventoryDrawer
   ];
 
   return (
-    <Drawer title="Inventory breakdown" open={open} onClose={onClose} width={640}>
+    <Drawer title="Available qty" open={open} onClose={onClose} width={640}>
       <div className="inventory-drawer-summary">
         <div className="inventory-drawer-summary-row">
           <div className="inventory-drawer-summary-item">
@@ -106,6 +120,40 @@ export default function InventoryDrawer({ line, open, onClose }: InventoryDrawer
           tableLayout="fixed"
         />
       </div>
+
+      <section className="inventory-drawer-supply-assessment">
+        <Typography.Title level={5} className="inventory-drawer-supply-title">
+          Supply assessment
+        </Typography.Title>
+        <dl className="inventory-drawer-supply-list">
+          <div className="inventory-drawer-supply-item">
+            <Typography.Text type="secondary">Repair earliest EDD</Typography.Text>
+            <Typography.Text>
+              {assessment.repairEarliestEdd
+                ? `${formatDate(assessment.repairEarliestEdd)} (${assessment.repairPoNumber})`
+                : '—'}
+            </Typography.Text>
+          </div>
+          <div className="inventory-drawer-supply-item">
+            <Typography.Text type="secondary">New buy earliest EDD</Typography.Text>
+            <Typography.Text>
+              {assessment.newBuyEarliestEdd
+                ? `${formatDate(assessment.newBuyEarliestEdd)} (${assessment.newBuyPoNumber})`
+                : '—'}
+            </Typography.Text>
+          </div>
+          <div className="inventory-drawer-supply-item">
+            <Typography.Text type="secondary">Spares required by</Typography.Text>
+            <Typography.Text>{formatDate(assessment.sparesRequiredBy)}</Typography.Text>
+          </div>
+          <div className="inventory-drawer-supply-item inventory-drawer-supply-item--recommendation">
+            <Typography.Text type="secondary">Recommendation</Typography.Text>
+            <Tag color={RECOMMENDATION_COLORS[assessment.recommendation]}>
+              {assessment.recommendation}
+            </Tag>
+          </div>
+        </dl>
+      </section>
     </Drawer>
   );
 }

@@ -96,28 +96,13 @@ export function getPlatformVariantColumn<T extends PlanLine>(
   };
 }
 
-export function getNsnMpnDescriptionColumns<T extends NsnRow>(
-  onViewNsn?: (record: T) => void,
-): ColumnType<T>[] {
+export function getNsnMpnDescriptionColumns<T extends NsnRow>(): ColumnType<T>[] {
   return [
     {
       title: 'NSN',
       dataIndex: 'nsn',
       width: NSN_COLUMN_WIDTH,
       ellipsis: true,
-      render: onViewNsn
-        ? (nsn: string, record: T) => (
-            <Button
-              type="link"
-              size="small"
-              className="nsn-link"
-              style={{ padding: 0 }}
-              onClick={() => onViewNsn(record)}
-            >
-              {nsn}
-            </Button>
-          )
-        : undefined,
     },
     getMpnColumn<T>(),
     {
@@ -264,7 +249,6 @@ export function getOperationalComponentColumns(
   category: Extract<ComponentCategory, 'LRU' | 'Consumable'>,
   platform: Platform,
   variant: string,
-  onViewNsn: (line: PlanLine) => void,
   onViewInventory: (line: PlanLine) => void,
   columnVisibility: Partial<Record<'trade' | 'system' | 'remarks', boolean>> = {},
 ): ColumnType<PlanLine>[] {
@@ -272,9 +256,7 @@ export function getOperationalComponentColumns(
   const showSystem = category === 'LRU' && columnVisibility.system === true;
   const showRemarks = columnVisibility.remarks !== false;
 
-  const columns: ColumnType<PlanLine>[] = [
-    ...getNsnMpnDescriptionColumns<PlanLine>(onViewNsn),
-  ];
+  const columns: ColumnType<PlanLine>[] = [...getNsnMpnDescriptionColumns<PlanLine>()];
 
   if (showTrade) {
     columns.push(getTradeColumn<PlanLine>());
@@ -453,9 +435,10 @@ export const WORK_QUEUE_SCROLL_X = computeDetachmentTableScrollX([
   SUMMARY_EDIT_COLUMN_WIDTH,
 ]);
 
-/** Approval pack shortfall: Platform/Variant, Required, Available, Delta, Resolution, Edit */
+/** Approval pack shortfall: Platform/Variant, Required, Available, To-bring, Delta, Resolution, Edit */
 export const APPROVAL_PACK_SHORTFALL_SCROLL_X = computeDetachmentTableScrollX([
   PLATFORM_VARIANT_COLUMN_WIDTH,
+  QTY_COLUMN_WIDTH,
   QTY_COLUMN_WIDTH,
   QTY_COLUMN_WIDTH,
   SUMMARY_SEVENTH_COLUMN_WIDTH,
@@ -463,9 +446,10 @@ export const APPROVAL_PACK_SHORTFALL_SCROLL_X = computeDetachmentTableScrollX([
   SUMMARY_EDIT_COLUMN_WIDTH,
 ]);
 
-/** Approval pack deviation: Platform/Variant, Required, Available, Delta, Reason, Edit */
+/** Approval pack deviation: Platform/Variant, Required, Available, To-bring, Delta, Reason, Edit */
 export const APPROVAL_PACK_DEVIATION_SCROLL_X = computeDetachmentTableScrollX([
   PLATFORM_VARIANT_COLUMN_WIDTH,
+  QTY_COLUMN_WIDTH,
   QTY_COLUMN_WIDTH,
   QTY_COLUMN_WIDTH,
   80,

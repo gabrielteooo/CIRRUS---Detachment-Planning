@@ -5,7 +5,8 @@ export const MOCK_DETACHMENTS: Detachment[] = [
   {
     id: 'det-empty',
     name: 'Exercise Horizon 2026',
-    detachmentDate: '2026-07-10',
+    detachmentDateStart: '2026-07-10',
+    detachmentDateEnd: '2026-07-23',
     createdBy: DIRECTOR_USER.id,
     createdByName: DIRECTOR_USER.name,
     lastUpdated: '2026-07-20T10:00:00',
@@ -13,7 +14,8 @@ export const MOCK_DETACHMENTS: Detachment[] = [
   {
     id: 'det-001',
     name: 'Exercise Falcon 2026',
-    detachmentDate: '2026-03-15',
+    detachmentDateStart: '2026-03-15',
+    detachmentDateEnd: '2026-03-28',
     createdBy: DIRECTOR_USER.id,
     createdByName: DIRECTOR_USER.name,
     lastUpdated: '2026-07-28T09:30:00',
@@ -21,7 +23,8 @@ export const MOCK_DETACHMENTS: Detachment[] = [
   {
     id: 'det-002',
     name: 'Operation Lift 2026',
-    detachmentDate: '2026-04-25',
+    detachmentDateStart: '2026-04-25',
+    detachmentDateEnd: '2026-05-08',
     createdBy: DIRECTOR_USER.id,
     createdByName: DIRECTOR_USER.name,
     lastUpdated: '2026-07-27T14:15:00',
@@ -29,7 +32,8 @@ export const MOCK_DETACHMENTS: Detachment[] = [
   {
     id: 'det-003',
     name: 'Detachment Alpha',
-    detachmentDate: '2026-05-20',
+    detachmentDateStart: '2026-05-20',
+    detachmentDateEnd: '2026-06-02',
     createdBy: DIRECTOR_USER.id,
     createdByName: DIRECTOR_USER.name,
     lastUpdated: '2026-07-25T11:00:00',
@@ -37,7 +41,8 @@ export const MOCK_DETACHMENTS: Detachment[] = [
   {
     id: 'det-joint',
     name: 'Joint Exercise 2026',
-    detachmentDate: '2026-06-18',
+    detachmentDateStart: '2026-06-18',
+    detachmentDateEnd: '2026-07-01',
     createdBy: DIRECTOR_USER.id,
     createdByName: DIRECTOR_USER.name,
     lastUpdated: '2026-07-26T10:00:00',
@@ -45,7 +50,8 @@ export const MOCK_DETACHMENTS: Detachment[] = [
   {
     id: 'det-004',
     name: 'Exercise Eagle 2025',
-    detachmentDate: '2025-08-15',
+    detachmentDateStart: '2025-08-15',
+    detachmentDateEnd: '2025-08-28',
     createdBy: DIRECTOR_USER.id,
     createdByName: DIRECTOR_USER.name,
     lastUpdated: '2025-09-01T08:00:00',
@@ -53,7 +59,8 @@ export const MOCK_DETACHMENTS: Detachment[] = [
   {
     id: 'det-005',
     name: 'Operation Chinook 2025',
-    detachmentDate: '2025-11-18',
+    detachmentDateStart: '2025-11-18',
+    detachmentDateEnd: '2025-12-01',
     createdBy: DIRECTOR_USER.id,
     createdByName: DIRECTOR_USER.name,
     lastUpdated: '2025-11-20T16:45:00',
@@ -61,7 +68,8 @@ export const MOCK_DETACHMENTS: Detachment[] = [
   {
     id: 'det-006',
     name: 'Detachment Bravo',
-    detachmentDate: '2026-06-18',
+    detachmentDateStart: '2026-06-18',
+    detachmentDateEnd: '2026-07-01',
     createdBy: DIRECTOR_USER.id,
     createdByName: DIRECTOR_USER.name,
     lastUpdated: '2026-07-26T10:00:00',
@@ -69,7 +77,8 @@ export const MOCK_DETACHMENTS: Detachment[] = [
   {
     id: 'det-007',
     name: 'Exercise Talon 2025',
-    detachmentDate: '2025-06-20',
+    detachmentDateStart: '2025-06-20',
+    detachmentDateEnd: '2025-07-03',
     createdBy: DIRECTOR_USER.id,
     createdByName: DIRECTOR_USER.name,
     lastUpdated: '2025-06-22T10:00:00',
@@ -77,7 +86,8 @@ export const MOCK_DETACHMENTS: Detachment[] = [
   {
     id: 'det-008',
     name: 'Detachment Charlie',
-    detachmentDate: '2025-04-18',
+    detachmentDateStart: '2025-04-18',
+    detachmentDateEnd: '2025-05-01',
     createdBy: DIRECTOR_USER.id,
     createdByName: DIRECTOR_USER.name,
     lastUpdated: '2025-04-20T14:00:00',
@@ -85,7 +95,8 @@ export const MOCK_DETACHMENTS: Detachment[] = [
   {
     id: 'det-009',
     name: 'Operation Heavy Lift 2025',
-    detachmentDate: '2025-09-15',
+    detachmentDateStart: '2025-09-15',
+    detachmentDateEnd: '2025-09-28',
     createdBy: DIRECTOR_USER.id,
     createdByName: DIRECTOR_USER.name,
     lastUpdated: '2025-09-17T09:00:00',
@@ -93,7 +104,8 @@ export const MOCK_DETACHMENTS: Detachment[] = [
   {
     id: 'det-010',
     name: 'Exercise Strike 2025',
-    detachmentDate: '2025-02-14',
+    detachmentDateStart: '2025-02-14',
+    detachmentDateEnd: '2025-02-27',
     createdBy: DIRECTOR_USER.id,
     createdByName: DIRECTOR_USER.name,
     lastUpdated: '2025-02-16T11:30:00',
@@ -101,7 +113,8 @@ export const MOCK_DETACHMENTS: Detachment[] = [
   {
     id: 'det-011',
     name: 'Detachment Delta',
-    detachmentDate: '2025-07-22',
+    detachmentDateStart: '2025-07-22',
+    detachmentDateEnd: '2025-08-04',
     createdBy: DIRECTOR_USER.id,
     createdByName: DIRECTOR_USER.name,
     lastUpdated: '2025-07-24T16:00:00',
@@ -109,7 +122,8 @@ export const MOCK_DETACHMENTS: Detachment[] = [
   {
     id: 'det-012',
     name: 'Exercise Vanguard 2024',
-    detachmentDate: '2024-10-25',
+    detachmentDateStart: '2024-10-25',
+    detachmentDateEnd: '2024-11-07',
     createdBy: DIRECTOR_USER.id,
     createdByName: DIRECTOR_USER.name,
     lastUpdated: '2024-10-28T08:00:00',

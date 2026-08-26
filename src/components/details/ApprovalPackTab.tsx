@@ -11,11 +11,11 @@ import {
   Typography,
   message,
 } from 'antd';
-import { PrinterOutlined } from '@ant-design/icons';
-import { type Dayjs } from 'dayjs';
+import type { Dayjs } from 'dayjs';
 import type { OfflineApprovalRecord, PlanLine } from '../../types/planLine';
 import {
   formatShortfallActions,
+  formatDeviationResolution,
   getApprovalPackLines,
   isLineApprovalComplete,
 } from '../../types/planLine';
@@ -26,6 +26,7 @@ import {
   getRequiredColumn,
   getAvailableColumn,
   getAvailableColumnLinkRenderer,
+  getToBringColumn,
   getSummaryShortfallDeltaColumn,
   getSummaryDeviationDeltaColumn,
   DETACHMENT_TABLE_LAYOUT,
@@ -41,7 +42,6 @@ interface ApprovalPackTabProps {
   viewOnly: boolean;
   onEditLine: (line: PlanLine) => void;
   onViewInventory: (line: PlanLine) => void;
-  onViewNsn: (line: PlanLine) => void;
   onApproveLine: (lineId: string, approval: OfflineApprovalRecord | null) => void;
 }
 
@@ -54,12 +54,10 @@ export default function ApprovalPackTab({
   viewOnly,
   onEditLine,
   onViewInventory,
-  onViewNsn,
   onApproveLine,
 }: ApprovalPackTabProps) {
   const [approverName, setApproverName] = useState('');
   const [approvedDate, setApprovedDate] = useState<Dayjs | null>(null);
-  const [meeting, setMeeting] = useState('');
   const [showSignoffValidation, setShowSignoffValidation] = useState(false);
 
   const { shortfalls, deviations } = useMemo(
@@ -67,6 +65,18 @@ export default function ApprovalPackTab({
     [lines],
   );
   const total = shortfalls.length + deviations.length;
+
+  const allPackLines = useMemo(() => {
+    const byId = new Map<string, PlanLine>();
+    for (const line of [...shortfalls, ...deviations]) {
+      byId.set(line.id, line);
+    }
+    return [...byId.values()];
+  }, [shortfalls, deviations]);
+
+  const approvedCount = allPackLines.filter(isLineApprovalComplete).length;
+  const allApproved = allPackLines.length > 0 && approvedCount === allPackLines.length;
+  const someApproved = approvedCount > 0 && !allApproved;
 
   const approverMissing = !approverName.trim();
   const dateMissing = !approvedDate;
@@ -87,8 +97,34 @@ export default function ApprovalPackTab({
     return {
       approverName: approverName.trim(),
       approvedDate: approvedDate!.format('YYYY-MM-DD'),
-      meeting: meeting.trim() || undefined,
     };
+  };
+
+  const handleSelectAllApprove = (checked: boolean) => {
+    if (checked) {
+      const approval = buildApprovalRecord();
+      if (!approval) return;
+      let newlyApproved = 0;
+      for (const line of allPackLines) {
+        if (!isLineApprovalComplete(line)) {
+          onApproveLine(line.id, approval);
+          newlyApproved += 1;
+        }
+      }
+      message.success(
+        newlyApproved > 0
+          ? `Approved ${newlyApproved} line${newlyApproved === 1 ? '' : 's'}`
+          : 'All lines already approved',
+      );
+      return;
+    }
+
+    for (const line of allPackLines) {
+      if (isLineApprovalComplete(line)) {
+        onApproveLine(line.id, null);
+      }
+    }
+    message.success('Approvals removed');
   };
 
   const handleApproveToggle = (line: PlanLine, checked: boolean) => {
@@ -131,10 +167,11 @@ export default function ApprovalPackTab({
   };
 
   const shortfallColumns = [
-    ...getNsnMpnDescriptionColumns<PlanLine>(onViewNsn),
+    ...getNsnMpnDescriptionColumns<PlanLine>(),
     getPlatformVariantColumn<PlanLine>(platform, variant),
     getRequiredColumn<PlanLine>(),
     getAvailableColumn<PlanLine>(getAvailableColumnLinkRenderer(onViewInventory)),
+    getToBringColumn<PlanLine>(),
     getSummaryShortfallDeltaColumn<PlanLine>(),
     {
       title: 'Resolution',
@@ -147,17 +184,18 @@ export default function ApprovalPackTab({
   ];
 
   const deviationColumns = [
-    ...getNsnMpnDescriptionColumns<PlanLine>(onViewNsn),
+    ...getNsnMpnDescriptionColumns<PlanLine>(),
     getPlatformVariantColumn<PlanLine>(platform, variant),
     getRequiredColumn<PlanLine>(),
     getAvailableColumn<PlanLine>(getAvailableColumnLinkRenderer(onViewInventory)),
+    getToBringColumn<PlanLine>(),
     getSummaryDeviationDeltaColumn<PlanLine>(80),
     {
-      title: 'Reason',
-      dataIndex: 'deviationReason',
+      title: 'Reason / Remarks',
+      key: 'deviationResolution',
       width: FLEX_TEXT_COLUMN_MIN_WIDTH,
       ellipsis: true,
-      render: (v: string) => v ?? '—',
+      render: (_: unknown, record: PlanLine) => formatDeviationResolution(record),
     },
     actionColumn,
   ];
@@ -228,25 +266,18 @@ export default function ApprovalPackTab({
               />
             </Form.Item>
           </div>
-          <div className="approval-pack-signoff-field approval-pack-signoff-field--meeting">
-            <Typography.Text type="secondary" className="approval-pack-signoff-label">
-              Meeting
-            </Typography.Text>
-            <Form.Item className="approval-pack-signoff-form-item">
-              <Input
-                value={meeting}
-                onChange={(e) => setMeeting(e.target.value)}
-                placeholder="e.g. Weekly logistics review"
-                disabled={viewOnly}
-              />
-            </Form.Item>
+        </div>
+        {!viewOnly && (
+          <div className="approval-pack-signoff-actions">
+            <Checkbox
+              checked={allApproved}
+              indeterminate={someApproved}
+              onChange={(event) => handleSelectAllApprove(event.target.checked)}
+            >
+              Select all to approve
+            </Checkbox>
           </div>
-        </div>
-        <div className="approval-pack-signoff-actions">
-          <Button icon={<PrinterOutlined />} onClick={() => window.print()}>
-            Print
-          </Button>
-        </div>
+        )}
       </div>
 
       {shortfalls.length > 0 && (

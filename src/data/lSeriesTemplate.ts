@@ -24,6 +24,13 @@ export interface LSPlatformTemplate {
 
 export const L_SERIES_TEMPLATE = lSeriesData as Record<Platform, LSPlatformTemplate>;
 
+export function resolveParameterTier(platform: Platform, value: number): number {
+  const tiers = L_SERIES_TEMPLATE[platform].tiers;
+  const eligible = tiers.filter((tier) => tier <= value);
+  if (eligible.length === 0) return tiers[0];
+  return Math.max(...eligible);
+}
+
 export const L_SERIES_VERSION_IDS = {
   'F-16': 'L-F16-2026-TEMPLATE',
   'CH-47': 'L-CH47-2026-TEMPLATE',

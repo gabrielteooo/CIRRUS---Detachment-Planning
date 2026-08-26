@@ -9,9 +9,26 @@ export function formatPlatformVariant(platform: Platform, plan: PlatformPlan): s
 }
 
 export function formatVariantRowParameters(plan: PlatformPlan): string {
-  const tier = plan.variantRows[0]?.parameterTier;
-  if (tier == null) return '—';
-  return plan.platform === 'F-16' ? `${tier} hrs total` : `${tier} aircraft total`;
+  if (plan.platform === 'F-16') {
+    const hours = plan.flyingHours ?? plan.variantRows[0]?.parameterTier;
+    if (hours == null) return '—';
+    return `${plan.aircraftCount} aircraft · ${hours} hrs total`;
+  }
+  const count = plan.aircraftCount ?? plan.variantRows[0]?.parameterTier;
+  if (count == null) return '—';
+  return `${count} aircraft total`;
+}
+
+/** F-16: flying hours; CH-47: number of aircraft — for plan summary header. */
+export function formatPlanOperationalParameters(plan: PlatformPlan): string {
+  if (plan.platform === 'F-16') {
+    const hours = plan.flyingHours ?? plan.variantRows[0]?.parameterTier;
+    if (hours == null) return '—';
+    return `${hours} hrs`;
+  }
+  const count = plan.aircraftCount ?? plan.variantRows[0]?.parameterTier;
+  if (count == null) return '—';
+  return `${count} aircraft`;
 }
 
 export function formatLSeriesVersions(plan: PlatformPlan): string {

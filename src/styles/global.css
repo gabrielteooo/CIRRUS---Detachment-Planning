@@ -170,6 +170,50 @@ body {
 }
 
 /* Plan details visual hierarchy */
+.plan-summary-header {
+  background: #fff;
+  border: 1px solid #e2e2e2;
+  border-radius: 8px;
+  padding: 16px 20px;
+  margin-bottom: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.plan-summary-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.plan-summary-header-row--meta {
+  flex-wrap: wrap;
+}
+
+.plan-summary-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  min-width: 0;
+  flex: 1;
+}
+
+.plan-summary-divider {
+  user-select: none;
+}
+
+.plan-summary-status {
+  flex-shrink: 0;
+  margin-inline-end: 0;
+}
+
+.plan-summary-header-row--actions {
+  justify-content: flex-start;
+}
+
 .plan-details-content {
   display: flex;
   flex-direction: column;
@@ -345,10 +389,6 @@ body {
   width: 180px;
 }
 
-.approval-pack-signoff-field--meeting .ant-input {
-  width: 240px;
-}
-
 .approval-pack-signoff-label {
   font-size: 12px;
   text-transform: uppercase;
@@ -390,8 +430,7 @@ body {
 
 @media (max-width: 960px) {
   .approval-pack-signoff-field--officer .ant-input,
-  .approval-pack-signoff-field--date .ant-picker,
-  .approval-pack-signoff-field--meeting .ant-input {
+  .approval-pack-signoff-field--date .ant-picker {
     width: 100%;
     min-width: 220px;
   }
@@ -423,7 +462,7 @@ body {
   .ant-table-cell .ant-btn,
   .plan-details-kpi,
   .ant-tabs-nav,
-  .plan-details-content > div:first-child {
+  .plan-summary-header-row--actions {
     display: none !important;
   }
 }
@@ -593,6 +632,39 @@ body {
 .inventory-drawer-table .ant-table table {
   table-layout: fixed;
   width: 100%;
+}
+
+.inventory-drawer-supply-assessment {
+  margin-top: 24px;
+  padding: 16px;
+  border: 1px solid #f0f0f0;
+  border-radius: 8px;
+  background: #fafafa;
+}
+
+.inventory-drawer-supply-title {
+  margin: 0 0 12px !important;
+  font-size: 14px !important;
+}
+
+.inventory-drawer-supply-list {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.inventory-drawer-supply-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+}
+
+.inventory-drawer-supply-item--recommendation {
+  padding-top: 8px;
+  border-top: 1px solid #e8e8e8;
+  margin-top: 4px;
 }
 
 .summary-collapse-shortfall,
@@ -850,6 +922,18 @@ body {
   color: rgba(0, 0, 0, 0.88);
 }
 
+.create-plan-field-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.create-plan-field-label-icon {
+  color: rgba(0, 0, 0, 0.45);
+  font-size: 14px;
+  cursor: help;
+}
+
 .edit-line-qty-cell-input {
   width: 100% !important;
 }
@@ -926,6 +1010,12 @@ body {
 
 .shortfall-action-block--selected {
   border-left: 3px solid #cf1322;
+}
+
+.shortfall-action-block--disabled {
+  opacity: 0.55;
+  background: #fafafa;
+  border-color: #f0f0f0;
 }
 
 .shortfall-action-row {
@@ -1010,9 +1100,30 @@ body {
   width: 100%;
 }
 
+.shortfall-action-entry-row--wait {
+  align-items: flex-start;
+}
+
+.shortfall-action-entry-row--cannibalise {
+  align-items: flex-start;
+}
+
+.shortfall-action-entry-orders {
+  flex: 1;
+  min-width: 0;
+}
+
+.shortfall-action-entry-orders .ant-select {
+  width: 100%;
+}
+
 .shortfall-action-entry-tail {
   flex: 1;
   min-width: 0;
+}
+
+.shortfall-action-entry-tail .ant-select {
+  width: 100%;
 }
 
 .shortfall-action-add-entry {

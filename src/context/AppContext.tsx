@@ -64,7 +64,8 @@ interface AppContextValue {
 
 export interface CreateDetachmentInput {
   name: string;
-  detachmentDate: string;
+  detachmentDateStart: string;
+  detachmentDateEnd: string;
 }
 
 export interface CreatePlanInput {
@@ -73,6 +74,10 @@ export interface CreatePlanInput {
   platform: Platform;
   detachmentType: DetachmentType;
   needByDate: string;
+  planDateStart: string;
+  planDateEnd: string;
+  aircraftCount: number;
+  flyingHours?: number;
   variantRows: PlanVariantRow[];
   remarks?: string;
 }
@@ -146,7 +151,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const newDetachment: Detachment = {
       id,
       name: input.name,
-      detachmentDate: input.detachmentDate,
+      detachmentDateStart: input.detachmentDateStart,
+      detachmentDateEnd: input.detachmentDateEnd,
       createdBy: DIRECTOR_USER.id,
       createdByName: DIRECTOR_USER.name,
       lastUpdated: new Date().toISOString(),
@@ -233,6 +239,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
         detachmentType: input.detachmentType,
         lSeriesId: input.lSeriesId,
         needByDate: input.needByDate,
+        planDateStart: input.planDateStart,
+        planDateEnd: input.planDateEnd,
+        aircraftCount: input.aircraftCount,
+        flyingHours: input.flyingHours,
         variantRows,
         status: 'Draft',
         fillRatePercent: 0,

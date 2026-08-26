@@ -9,7 +9,7 @@ import {
   aggregateShortfalls,
   fillRateColor,
 } from '../../data/mockPlans';
-import { formatDate, isPastDetachment } from '../../utils/planUtils';
+import { formatDateRange, isPastDetachment } from '../../utils/planUtils';
 
 const STATUS_COLORS: Record<string, string> = {
   Draft: 'default',
@@ -140,7 +140,8 @@ export default function DetachmentCard({
         )}
 
         <Typography.Text type="secondary" style={{ fontSize: 13 }}>
-          Detachment: {formatDate(detachment.detachmentDate)}
+          Detachment:{' '}
+          {formatDateRange(detachment.detachmentDateStart, detachment.detachmentDateEnd)}
         </Typography.Text>
       </Space>
     </Card>

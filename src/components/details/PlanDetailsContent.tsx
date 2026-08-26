@@ -1,13 +1,14 @@
 import { useMemo, useState } from 'react';
-import { App, Button, Modal, Space, Tabs, Tag, Typography } from 'antd';
+import { App, Button, Space, Tabs, Tag, Typography } from 'antd';
 import { EditOutlined, FileTextOutlined } from '@ant-design/icons';
 import { useApp } from '../../context/AppContext';
 import type { Detachment, PlatformPlan } from '../../types/detachment';
-import { formatDate } from '../../utils/planUtils';
+import { formatDateRange } from '../../utils/planUtils';
 import {
   formatLSeriesVersions,
+  formatPlatformVariant,
+  formatPlanOperationalParameters,
   formatVariantLabels,
-  formatVariantRowParameters,
 } from '../../utils/planDisplayUtils';
 import {
   applyOfflineApproval,
@@ -26,9 +27,9 @@ import ApprovalPackTab from './ApprovalPackTab';
 import LSeriesTable from './LSeriesTable';
 import AddNsnDrawer from './AddNsnDrawer';
 import InventoryDrawer from './InventoryDrawer';
-import NsnDrilldownModal from './NsnDrilldownModal';
 import EditLineDrawer from './EditLineDrawer';
 import EditPolLineDrawer from './EditPolLineDrawer';
+import EditParametersModal from './EditParametersModal';
 import RemarksModal from './RemarksModal';
 
 const STATUS_COLORS: Record<string, string> = {
@@ -57,7 +58,6 @@ export default function PlanDetailsContent({
 
   const [activeTab, setActiveTab] = useState<PlanTabKey>('work-queue');
   const [inventoryLine, setInventoryLine] = useState<PlanLine | null>(null);
-  const [nsnDrilldownLine, setNsnDrilldownLine] = useState<PlanLine | null>(null);
   const [editLine, setEditLine] = useState<PlanLine | null>(null);
   const [remarksOpen, setRemarksOpen] = useState(false);
   const [editParamsOpen, setEditParamsOpen] = useState(false);
@@ -122,7 +122,6 @@ export default function PlanDetailsContent({
           viewOnly={viewOnly}
           onEditLine={openEditLine}
           onViewInventory={setInventoryLine}
-          onViewNsn={setNsnDrilldownLine}
         />
       ),
     },
@@ -137,7 +136,6 @@ export default function PlanDetailsContent({
           viewOnly={viewOnly}
           onEditLine={openEditLine}
           onViewInventory={setInventoryLine}
-          onViewNsn={setNsnDrilldownLine}
           onAddNsn={() => setAddNsnOpen(true)}
           onDeleteLine={handleDeleteLine}
         />
@@ -154,7 +152,6 @@ export default function PlanDetailsContent({
           viewOnly={viewOnly}
           onEditLine={openEditLine}
           onViewInventory={setInventoryLine}
-          onViewNsn={setNsnDrilldownLine}
           onApproveLine={handleApproveLine}
         />
       ),
@@ -163,44 +160,39 @@ export default function PlanDetailsContent({
 
   return (
     <div>
-      <div
-        style={{
-          background: '#fff',
-          border: '1px solid #e2e2e2',
-          borderRadius: 8,
-          padding: '16px 20px',
-          marginBottom: 24,
-        }}
-      >
-        <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
-          <Space wrap size={[16, 8]}>
+      <div className="plan-summary-header">
+        <div className="plan-summary-header-row plan-summary-header-row--meta">
+          <div className="plan-summary-meta">
             <Typography.Text>
-              <strong>{plan.platform}</strong> · {variantLabel}
+              <strong>{formatPlatformVariant(plan.platform, plan)}</strong>
             </Typography.Text>
-            <Typography.Text type="secondary">|</Typography.Text>
+            <Typography.Text type="secondary" className="plan-summary-divider">
+              |
+            </Typography.Text>
             <Typography.Text type="secondary">
               L-series: {formatLSeriesVersions(plan)}
             </Typography.Text>
-            <Typography.Text type="secondary">|</Typography.Text>
-            <Typography.Text type="secondary">
-              {formatVariantRowParameters(plan)}
+            <Typography.Text type="secondary" className="plan-summary-divider">
+              |
             </Typography.Text>
-            <Typography.Text type="secondary">|</Typography.Text>
             <Typography.Text type="secondary">
-              Type: {plan.detachmentType}
+              {plan.platform === 'F-16' ? 'Flying hours' : 'No. of aircraft'}:{' '}
+              {formatPlanOperationalParameters(plan)}
             </Typography.Text>
-            <Typography.Text type="secondary">|</Typography.Text>
+            <Typography.Text type="secondary" className="plan-summary-divider">
+              |
+            </Typography.Text>
             <Typography.Text type="secondary">
-              Need-by: {formatDate(plan.needByDate)}
+              Plan dates: {formatDateRange(plan.planDateStart, plan.planDateEnd)}
             </Typography.Text>
-            <Typography.Text type="secondary">|</Typography.Text>
-            <Typography.Text type="secondary">
-              Detachment: {formatDate(detachment.detachmentDate)}
-            </Typography.Text>
-            <Tag color={STATUS_COLORS[plan.status]}>{plan.status}</Tag>
-          </Space>
+          </div>
+          <Tag color={STATUS_COLORS[plan.status]} className="plan-summary-status">
+            {plan.status}
+          </Tag>
+        </div>
 
-          <Space>
+        <div className="plan-summary-header-row plan-summary-header-row--actions">
+          <Space wrap>
             {!viewOnly && (
               <>
                 <Button icon={<EditOutlined />} onClick={() => setEditParamsOpen(true)}>
@@ -233,13 +225,8 @@ export default function PlanDetailsContent({
       <InventoryDrawer
         line={inventoryLine}
         open={!!inventoryLine}
+        sparesRequiredBy={detachment.detachmentDateStart}
         onClose={() => setInventoryLine(null)}
-      />
-
-      <NsnDrilldownModal
-        line={nsnDrilldownLine}
-        open={!!nsnDrilldownLine}
-        onClose={() => setNsnDrilldownLine(null)}
       />
 
       {editLine && isPolLine(editLine) ? (
@@ -266,6 +253,14 @@ export default function PlanDetailsContent({
         onAdd={handleAddNsns}
       />
 
+      <EditParametersModal
+        open={editParamsOpen}
+        onClose={() => setEditParamsOpen(false)}
+        plan={plan}
+        detachment={detachment}
+        onSave={(updates) => updatePlan(planId, updates)}
+      />
+
       <RemarksModal
         open={remarksOpen}
         onClose={() => setRemarksOpen(false)}
@@ -273,22 +268,6 @@ export default function PlanDetailsContent({
         viewOnly={viewOnly}
         onSave={(remarks) => updatePlan(planId, { remarks })}
       />
-
-      <Modal
-        title="Edit parameters"
-        open={editParamsOpen}
-        onCancel={() => setEditParamsOpen(false)}
-        footer={[
-          <Button key="ok" type="primary" onClick={() => setEditParamsOpen(false)}>
-            OK
-          </Button>,
-        ]}
-      >
-        <Typography.Paragraph style={{ marginTop: 16 }}>
-          Edit parameters is planned for a future release. Plan parameters can be amended while the
-          plan is open, but this prototype shows a coming-soon stub.
-        </Typography.Paragraph>
-      </Modal>
     </div>
   );
 }
