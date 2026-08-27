@@ -7,7 +7,8 @@ import type {
 
 export interface AwaitingSupplyResolutionRow {
   key: string;
-  qty: number;
+  toTakeQty: number;
+  orderedQty: number | string;
   poNumber: string;
   edd: string;
   serialNo: string;
@@ -55,7 +56,8 @@ export function getApprovalPackResolutionSections(line: PlanLine): ApprovalPackR
         for (const [orderIndex, order] of waitAction.supplyOrders.entries()) {
           awaitingSupply.push({
             key: `${index}-${orderIndex}`,
-            qty: order.qty,
+            toTakeQty: waitAction.qty,
+            orderedQty: order.qty,
             poNumber: order.poNumber,
             edd: order.edd,
             serialNo: order.serialNo?.trim() || '—',
@@ -65,7 +67,8 @@ export function getApprovalPackResolutionSections(line: PlanLine): ApprovalPackR
       } else {
         awaitingSupply.push({
           key: String(index),
-          qty: waitAction.qty,
+          toTakeQty: waitAction.qty,
+          orderedQty: '—',
           poNumber: '—',
           edd: waitAction.needByDate,
           serialNo: '—',

@@ -27,6 +27,11 @@ const theme = {
       colorPrimary: PRIMARY,
       colorPrimaryHover: '#004f55',
       colorPrimaryActive: '#003b40',
+      borderRadius: 6,
+      controlHeight: 32,
+      colorTextDisabled: 'rgba(0, 0, 0, 0.25)',
+      colorBgContainerDisabled: 'rgba(0, 0, 0, 0.04)',
+      borderColorDisabled: '#d9d9d9',
     },
     Select: {
       optionSelectedBg: '#C7EBEA',

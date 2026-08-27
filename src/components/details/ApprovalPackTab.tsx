@@ -223,10 +223,22 @@ export default function ApprovalPackTab({
 
   return (
     <div className="approval-pack-tab">
-      <Typography.Paragraph type="secondary" className="approval-pack-tab-intro">
-        Select the lines to approve, enter approving officer and date of approval, then save.
-        Unchecked lines remain in the approval pack.
-      </Typography.Paragraph>
+      <div className="approval-pack-tab-header">
+        <Typography.Paragraph type="secondary" className="approval-pack-tab-intro">
+          Select the lines to approve, enter approving officer and date of approval, then save.
+          Unchecked lines remain in the approval pack.
+        </Typography.Paragraph>
+        <div className="approval-pack-view-toggle">
+          <Segmented<ApprovalPackViewMode>
+            value={viewMode}
+            onChange={setViewMode}
+            options={[
+              { label: 'Table view', value: 'table' },
+              { label: 'Presenter view', value: 'presenter' },
+            ]}
+          />
+        </div>
+      </div>
 
       <div
         className={`approval-pack-signoff-bar${
@@ -293,17 +305,6 @@ export default function ApprovalPackTab({
             </Button>
           </div>
         )}
-      </div>
-
-      <div className="approval-pack-view-toggle">
-        <Segmented<ApprovalPackViewMode>
-          value={viewMode}
-          onChange={setViewMode}
-          options={[
-            { label: 'Table view', value: 'table' },
-            { label: 'Presenter view', value: 'presenter' },
-          ]}
-        />
       </div>
 
       {viewMode === 'presenter' ? (

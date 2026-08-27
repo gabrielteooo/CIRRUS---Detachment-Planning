@@ -335,8 +335,18 @@ body {
   margin-bottom: 20px;
 }
 
+.approval-pack-tab-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
 .approval-pack-tab-intro {
-  margin-bottom: 16px !important;
+  margin-bottom: 0 !important;
+  flex: 1;
+  min-width: 0;
 }
 
 .approval-pack-signoff-bar {
@@ -412,9 +422,7 @@ body {
 }
 
 .approval-pack-view-toggle {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: 20px;
+  flex-shrink: 0;
 }
 
 .approval-pack-presenter-layout {
@@ -490,8 +498,10 @@ body {
   line-height: 1.4;
 }
 
-.approval-pack-list-item-tag {
-  margin: 4px 0 0;
+.approval-pack-list-item .line-status-tags {
+  margin: 0;
+  padding: 0;
+  width: 100%;
 }
 
 .approval-pack-presenter-list-section {
@@ -512,8 +522,17 @@ body {
   letter-spacing: 0.02em;
 }
 
-.approval-pack-detail-panel .edit-line-status-tag {
+.approval-pack-detail-panel .line-status-tags {
   margin-top: 8px;
+  margin-bottom: 0;
+  padding: 0;
+  width: 100%;
+}
+
+.approval-pack-list-item .line-status-tags.ant-space,
+.approval-pack-detail-panel .line-status-tags.ant-space {
+  display: flex;
+  justify-content: flex-start;
 }
 
 .approval-pack-metric--deviation-delta {
@@ -639,7 +658,7 @@ body {
 
 .approval-pack-resolution-table--wait .approval-pack-resolution-header,
 .approval-pack-resolution-table--wait .approval-pack-resolution-row {
-  grid-template-columns: 0.5fr 1fr 1fr 0.8fr 1.4fr;
+  grid-template-columns: 0.7fr 0.7fr 1fr 1fr 0.8fr 1.4fr;
 }
 
 .approval-pack-resolution-table--cannibalise .approval-pack-resolution-header,
@@ -673,6 +692,12 @@ body {
   border: 1px solid #d9d9d9;
   border-radius: 6px;
   background: #fff;
+  color: rgba(0, 0, 0, 0.88);
+  white-space: pre-wrap;
+}
+
+.approval-pack-presenter-reason-readonly {
+  margin-bottom: 0 !important;
   color: rgba(0, 0, 0, 0.88);
   white-space: pre-wrap;
 }
@@ -1109,6 +1134,15 @@ body {
   border-color: #004f55 !important;
 }
 
+.ant-btn-primary:disabled,
+.ant-btn-primary.ant-btn-disabled {
+  background-color: rgba(0, 0, 0, 0.04) !important;
+  border-color: #d9d9d9 !important;
+  color: rgba(0, 0, 0, 0.25) !important;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
 .ant-btn-link {
   color: #00636a !important;
 }
@@ -1144,7 +1178,7 @@ body {
   text-align: center;
 }
 
-.edit-line-status-tag {
+.edit-line-drawer .edit-line-status-tag {
   font-size: 16px !important;
   font-weight: 600;
   padding: 4px 14px !important;

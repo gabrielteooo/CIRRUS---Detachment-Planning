@@ -495,7 +495,7 @@ export default function EditLineDrawer({
         NSN: {line.nsn}
       </Typography.Text>
 
-      <LineStatusTags line={linePreview} />
+      <LineStatusTags line={linePreview} className="edit-line-status-tag" />
 
       <Form form={form} layout="vertical">
         <div className="edit-line-qty-row-section">

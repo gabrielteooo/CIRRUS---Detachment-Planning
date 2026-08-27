@@ -150,7 +150,8 @@ export default function ApprovalPackDetailPanel({
           </Typography.Title>
           <div className="approval-pack-resolution-table approval-pack-resolution-table--wait">
             <div className="approval-pack-resolution-header">
-              <span>Qty</span>
+              <span>To-take qty</span>
+              <span>Ordered Qty</span>
               <span>PO no.</span>
               <span>EDD</span>
               <span>S/N</span>
@@ -158,7 +159,8 @@ export default function ApprovalPackDetailPanel({
             </div>
             {resolutionSections.awaitingSupply.map((row) => (
               <div key={row.key} className="approval-pack-resolution-row">
-                <span>{row.qty}</span>
+                <span>{row.toTakeQty}</span>
+                <span>{row.orderedQty}</span>
                 <span>{row.poNumber}</span>
                 <span>{formatResolutionDate(row.edd)}</span>
                 <span>{row.serialNo}</span>
@@ -216,9 +218,9 @@ export default function ApprovalPackDetailPanel({
               Deviation delta: {formatDeviationDeltaValue(deviationDelta)}
             </Typography.Text>
           )}
-          <div className="approval-pack-presenter-reason-value">
+          <Typography.Paragraph className="approval-pack-presenter-reason-readonly">
             {formatDeviationResolution(line)}
-          </div>
+          </Typography.Paragraph>
         </section>
       )}
     </article>
