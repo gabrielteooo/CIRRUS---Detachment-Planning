@@ -1,15 +1,32 @@
-import { Descriptions, message } from 'antd';
-import { Navigate, useParams } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { App, Button, Descriptions, message } from 'antd';
+import { Navigate, useLocation, useNavigate, useParams } from 'react-router-dom';
 import InlineEditableName from '../components/lseries/InlineEditableName';
 import LSeriesComponentsTable from '../components/lseries/LSeriesComponentsTable';
+import UploadLSeriesModal from '../components/lseries/UploadLSeriesModal';
 import { useApp } from '../context/AppContext';
 import { formatDateTime } from '../utils/planUtils';
+import { showLSeriesSubmittedToast } from '../utils/planLineToasts';
 
 export default function LSeriesDetailsPage() {
   const { lSeriesId } = useParams();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { message: messageApi } = App.useApp();
   const { getLSeriesRecord, updateLSeriesName } = useApp();
+  const [replaceOpen, setReplaceOpen] = useState(false);
 
   const record = lSeriesId ? getLSeriesRecord(lSeriesId) : undefined;
+
+  useEffect(() => {
+    const toast = (
+      location.state as { lSeriesToast?: { name: string; isReplace: boolean } } | null
+    )?.lSeriesToast;
+    if (!toast) return;
+
+    showLSeriesSubmittedToast(messageApi, toast.name, toast.isReplace);
+    navigate(location.pathname, { replace: true, state: null });
+  }, [location.state, location.pathname, messageApi, navigate]);
 
   if (!record) {
     return <Navigate to="/system-configurations/l-series" replace />;
@@ -24,6 +41,7 @@ export default function LSeriesDetailsPage() {
     <div>
       <div className="lseries-details-header">
         <InlineEditableName value={record.name} onSave={handleNameSave} editable />
+        <Button onClick={() => setReplaceOpen(true)}>Replace L-series</Button>
       </div>
 
       <Descriptions bordered size="small" column={3} style={{ marginBottom: 24 }}>
@@ -42,6 +60,13 @@ export default function LSeriesDetailsPage() {
         template={record.template}
         withCategoryTabs
         scrollY={520}
+      />
+
+      <UploadLSeriesModal
+        open={replaceOpen}
+        onClose={() => setReplaceOpen(false)}
+        mode="replace"
+        replaceRecord={record}
       />
     </div>
   );

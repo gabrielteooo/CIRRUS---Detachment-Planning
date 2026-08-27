@@ -11,9 +11,9 @@ import {
   formatVariantLabels,
 } from '../../utils/planDisplayUtils';
 import {
-  applyOfflineApproval,
-  clearOfflineApproval,
+  applyOfflineApprovalToLines,
   countApprovalPackLines,
+  countApprovedPackLines,
   countWorkQueueLines,
 } from '../../types/planLine';
 import type { OfflineApprovalRecord, PlanLine } from '../../types/planLine';
@@ -24,6 +24,7 @@ import { showAddedNsnToast, showPlanLineSaveToast } from '../../utils/planLineTo
 import KpiStrip from './KpiStrip';
 import WorkQueueTab from './WorkQueueTab';
 import ApprovalPackTab from './ApprovalPackTab';
+import ApprovedTab from './ApprovedTab';
 import LSeriesTable from './LSeriesTable';
 import AddNsnDrawer from './AddNsnDrawer';
 import InventoryDrawer from './InventoryDrawer';
@@ -38,7 +39,7 @@ const STATUS_COLORS: Record<string, string> = {
   Approved: 'success',
 };
 
-type PlanTabKey = 'work-queue' | 'all-components' | 'approval-pack';
+type PlanTabKey = 'work-queue' | 'all-components' | 'approval-pack' | 'approved';
 
 interface PlanDetailsContentProps {
   plan: PlatformPlan;
@@ -67,6 +68,7 @@ export default function PlanDetailsContent({
   const variantLabel = formatVariantLabels(plan);
   const workQueueCount = countWorkQueueLines(lines);
   const approvalPackCount = countApprovalPackLines(lines);
+  const approvedCount = countApprovedPackLines(lines);
 
   const openEditLine = (line: PlanLine) => {
     setEditLine(line);
@@ -102,12 +104,8 @@ export default function PlanDetailsContent({
     message.success('NSN removed');
   };
 
-  const handleApproveLine = (lineId: string, approval: OfflineApprovalRecord | null) => {
-    const next = lines.map((line) => {
-      if (line.id !== lineId) return line;
-      return approval ? applyOfflineApproval(line, approval) : clearOfflineApproval(line);
-    });
-    updatePlanLines(planId, next);
+  const handleApproveLines = (lineIds: string[], approval: OfflineApprovalRecord) => {
+    updatePlanLines(planId, applyOfflineApprovalToLines(lines, lineIds, approval));
   };
 
   const tabItems = [
@@ -152,7 +150,22 @@ export default function PlanDetailsContent({
           viewOnly={viewOnly}
           onEditLine={openEditLine}
           onViewInventory={setInventoryLine}
-          onApproveLine={handleApproveLine}
+          onApproveLines={handleApproveLines}
+          onSaved={() => setActiveTab('approved')}
+        />
+      ),
+    },
+    {
+      key: 'approved',
+      label: `Approved${approvedCount > 0 ? ` (${approvedCount})` : ''}`,
+      children: (
+        <ApprovedTab
+          lines={lines}
+          platform={plan.platform}
+          variant={variantLabel}
+          viewOnly={viewOnly}
+          onEditLine={openEditLine}
+          onViewInventory={setInventoryLine}
         />
       ),
     },

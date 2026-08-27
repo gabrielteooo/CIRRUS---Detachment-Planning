@@ -1,10 +1,20 @@
 import type { ColumnType } from 'antd/es/table';
 import { Button, Checkbox, Space, Tag } from 'antd';
+import dayjs from 'dayjs';
 import { getMpnForNsn } from '../../data/lSeriesTemplate';
 import type { Platform } from '../../types/detachment';
 import type { ComponentCategory, PlanLine } from '../../types/planLine';
 import { getDeviationDelta, getShortfallDelta } from '../../types/planLine';
+import { formatDate } from '../../utils/planUtils';
 import MpnCell from '../lseries/MpnCell';
+
+export interface ComponentTableColumnOptions {
+  lines?: PlanLine[];
+  planVariants?: string[];
+  getApplicableVariants?: (line: PlanLine) => string[];
+}
+
+const NOT_APPROVED_FILTER_VALUE = '__not_approved__';
 
 interface NsnRow {
   nsn: string;
@@ -17,9 +27,15 @@ export const NSN_COLUMN_WIDTH = 120;
 export const MPN_COLUMN_WIDTH = 120;
 export const DESCRIPTION_COLUMN_WIDTH = 260;
 export const PLATFORM_VARIANT_COLUMN_WIDTH = 120;
+export const PLATFORM_COLUMN_WIDTH = 96;
+export const VARIANT_COLUMN_WIDTH = 110;
+export const COMPONENT_PLATFORM_VARIANT_WIDTH =
+  PLATFORM_COLUMN_WIDTH + VARIANT_COLUMN_WIDTH;
 export const QTY_COLUMN_WIDTH = 88;
 export const UOM_COLUMN_WIDTH = 70;
 export const REMARKS_COLUMN_WIDTH = 160;
+export const APPROVED_BY_COLUMN_WIDTH = 140;
+export const APPROVED_ON_COLUMN_WIDTH = 130;
 export const POL_FULFILLED_COLUMN_WIDTH = 88;
 export const TRADE_COLUMN_WIDTH = 90;
 export const SYSTEM_COLUMN_WIDTH = 120;
@@ -87,13 +103,104 @@ export function getSystemColumn<T extends { system?: string }>(): ColumnType<T> 
 export function getPlatformVariantColumn<T extends PlanLine>(
   platform: Platform,
   variant: string,
+  options: ComponentTableColumnOptions = {},
 ): ColumnType<T> {
+  const planVariants =
+    options.planVariants ??
+    variant
+      .split(',')
+      .map((value) => value.trim())
+      .filter(Boolean);
+  const getApplicableVariants =
+    options.getApplicableVariants ?? (() => planVariants);
+
   return {
     title: 'Platform / Variant',
     key: 'platformVariant',
     width: PLATFORM_VARIANT_COLUMN_WIDTH,
-    render: () => <PlatformVariantTags platform={platform} variant={variant} />,
+    filters: planVariants.map((planVariant) => ({
+      text: `${platform} · ${planVariant}`,
+      value: planVariant,
+    })),
+    onFilter: (value, record) =>
+      getApplicableVariants(record).includes(String(value)),
+    render: (_: unknown, record: T) => {
+      const applicableVariants = getApplicableVariants(record);
+      return (
+        <PlatformVariantTags
+          platform={platform}
+          variant={applicableVariants.join(', ')}
+        />
+      );
+    },
   };
+}
+
+export function getPlatformColumn<T extends PlanLine>(platform: Platform): ColumnType<T> {
+  return {
+    title: 'Platform',
+    key: 'platform',
+    width: PLATFORM_COLUMN_WIDTH,
+    filters: [{ text: platform, value: platform }],
+    onFilter: (value) => value === platform,
+    render: () => <Tag>{platform}</Tag>,
+  };
+}
+
+export function getVariantColumn<T extends PlanLine>(
+  variant: string,
+  options: ComponentTableColumnOptions = {},
+): ColumnType<T> {
+  const planVariants =
+    options.planVariants ??
+    variant
+      .split(',')
+      .map((value) => value.trim())
+      .filter(Boolean);
+  const getApplicableVariants =
+    options.getApplicableVariants ?? (() => planVariants);
+
+  return {
+    title: 'Variant',
+    key: 'variant',
+    width: VARIANT_COLUMN_WIDTH,
+    filters: planVariants.map((planVariant) => ({
+      text: planVariant,
+      value: planVariant,
+    })),
+    onFilter: (value, record) =>
+      getApplicableVariants(record).includes(String(value)),
+    render: (_: unknown, record: T) => {
+      const applicableVariants = getApplicableVariants(record);
+      if (applicableVariants.length === 0) return '—';
+
+      return (
+        <Space size={[4, 4]} wrap>
+          {applicableVariants.map((planVariant) => (
+            <Tag key={planVariant}>{planVariant}</Tag>
+          ))}
+        </Space>
+      );
+    },
+  };
+}
+
+export function getComponentPlatformVariantColumns<T extends PlanLine>(
+  platform: Platform,
+  variant: string,
+  options: ComponentTableColumnOptions = {},
+): ColumnType<T>[] {
+  const planVariants =
+    options.planVariants ??
+    variant
+      .split(',')
+      .map((value) => value.trim())
+      .filter(Boolean);
+
+  return [
+    getPlatformColumn<T>(platform),
+    getVariantColumn<T>(variant, { ...options, planVariants }),
+  ];
 }
 
 export function getNsnMpnDescriptionColumns<T extends NsnRow>(): ColumnType<T>[] {
@@ -170,6 +277,85 @@ export function getRemarksColumn<T extends { remarks?: string }>(): ColumnType<T
   };
 }
 
+export function getApprovedByColumn<T extends PlanLine>(
+  lines: PlanLine[] = [],
+): ColumnType<T> {
+  const approvers = [
+    ...new Set(
+      lines
+        .map((line) => line.offlineApproval?.approverName?.trim())
+        .filter((name): name is string => !!name),
+    ),
+  ].sort((a, b) => a.localeCompare(b));
+
+  return {
+    title: 'Approved by',
+    key: 'approvedBy',
+    width: APPROVED_BY_COLUMN_WIDTH,
+    ellipsis: true,
+    sorter: (a, b) =>
+      (a.offlineApproval?.approverName?.trim() ?? '').localeCompare(
+        b.offlineApproval?.approverName?.trim() ?? '',
+      ),
+    filters: [
+      { text: 'Not approved', value: NOT_APPROVED_FILTER_VALUE },
+      ...approvers.map((name) => ({ text: name, value: name })),
+    ],
+    onFilter: (value, record) => {
+      const approver = record.offlineApproval?.approverName?.trim();
+      if (value === NOT_APPROVED_FILTER_VALUE) return !approver;
+      return approver === value;
+    },
+    render: (_: unknown, record: T) => record.offlineApproval?.approverName?.trim() || '—',
+  };
+}
+
+export function getApprovedOnColumn<T extends PlanLine>(
+  lines: PlanLine[] = [],
+): ColumnType<T> {
+  const approvalDates = [
+    ...new Set(
+      lines
+        .map((line) => line.offlineApproval?.approvedDate)
+        .filter((date): date is string => !!date),
+    ),
+  ].sort((a, b) => dayjs(a).valueOf() - dayjs(b).valueOf());
+
+  return {
+    title: 'Approved on',
+    key: 'approvedOn',
+    width: APPROVED_ON_COLUMN_WIDTH,
+    sorter: (a, b) => {
+      const aTime = a.offlineApproval?.approvedDate
+        ? dayjs(a.offlineApproval.approvedDate).valueOf()
+        : 0;
+      const bTime = b.offlineApproval?.approvedDate
+        ? dayjs(b.offlineApproval.approvedDate).valueOf()
+        : 0;
+      return aTime - bTime;
+    },
+    filters: [
+      { text: 'Not approved', value: NOT_APPROVED_FILTER_VALUE },
+      ...approvalDates.map((date) => ({ text: formatDate(date), value: date })),
+    ],
+    onFilter: (value, record) => {
+      const date = record.offlineApproval?.approvedDate;
+      if (value === NOT_APPROVED_FILTER_VALUE) return !date;
+      return date === value;
+    },
+    render: (_: unknown, record: T) => {
+      const date = record.offlineApproval?.approvedDate;
+      return date ? formatDate(date) : '—';
+    },
+  };
+}
+
+export function getApprovalMetaColumns<T extends PlanLine>(
+  lines: PlanLine[] = [],
+): ColumnType<T>[] {
+  return [getApprovedByColumn<T>(lines), getApprovedOnColumn<T>(lines)];
+}
+
 export function getPolFulfilledColumn(
   viewOnly: boolean,
   onToggle: (line: PlanLine, fulfilled: boolean) => void,
@@ -212,9 +398,11 @@ export function getPolReferenceColumns<T extends PlanLine>(
   platform: Platform,
   variant: string,
   columnVisibility: Partial<Record<'remarks' | 'uom', boolean>> = {},
+  tableOptions: ComponentTableColumnOptions = {},
 ): ColumnType<T>[] {
   const showRemarks = columnVisibility.remarks !== false;
   const showUom = columnVisibility.uom !== false;
+  const lines = tableOptions.lines ?? [];
 
   const columns: ColumnType<T>[] = [
     {
@@ -230,7 +418,7 @@ export function getPolReferenceColumns<T extends PlanLine>(
       width: DESCRIPTION_COLUMN_WIDTH,
       ellipsis: true,
     },
-    getPlatformVariantColumn<T>(platform, variant),
+    ...getComponentPlatformVariantColumns<T>(platform, variant, tableOptions),
     getRequiredColumn<T>(),
     getToBringColumn<T>(),
   ];
@@ -242,6 +430,8 @@ export function getPolReferenceColumns<T extends PlanLine>(
     columns.push(getRemarksColumn<T>());
   }
 
+  columns.push(...getApprovalMetaColumns<T>(lines));
+
   return columns;
 }
 
@@ -251,10 +441,12 @@ export function getOperationalComponentColumns(
   variant: string,
   onViewInventory: (line: PlanLine) => void,
   columnVisibility: Partial<Record<'trade' | 'system' | 'remarks', boolean>> = {},
+  tableOptions: ComponentTableColumnOptions = {},
 ): ColumnType<PlanLine>[] {
   const showTrade = category === 'LRU' && columnVisibility.trade === true;
   const showSystem = category === 'LRU' && columnVisibility.system === true;
   const showRemarks = columnVisibility.remarks !== false;
+  const lines = tableOptions.lines ?? [];
 
   const columns: ColumnType<PlanLine>[] = [...getNsnMpnDescriptionColumns<PlanLine>()];
 
@@ -266,7 +458,7 @@ export function getOperationalComponentColumns(
   }
 
   columns.push(
-    getPlatformVariantColumn<PlanLine>(platform, variant),
+    ...getComponentPlatformVariantColumns<PlanLine>(platform, variant, tableOptions),
     getRequiredColumn<PlanLine>(),
     getAvailableColumn<PlanLine>(getAvailableColumnLinkRenderer(onViewInventory)),
     getToBringColumn<PlanLine>(),
@@ -276,6 +468,8 @@ export function getOperationalComponentColumns(
     columns.push(getRemarksColumn<PlanLine>());
   }
 
+  columns.push(...getApprovalMetaColumns<PlanLine>(lines));
+
   return columns;
 }
 
@@ -284,10 +478,12 @@ export function computeOperationalTableScrollX(
   columnVisibility: Partial<Record<'trade' | 'system' | 'remarks', boolean>> = {},
 ): number {
   const extraWidths = [
-    PLATFORM_VARIANT_COLUMN_WIDTH,
+    COMPONENT_PLATFORM_VARIANT_WIDTH,
     QTY_COLUMN_WIDTH,
     QTY_COLUMN_WIDTH,
     QTY_COLUMN_WIDTH,
+    APPROVED_BY_COLUMN_WIDTH,
+    APPROVED_ON_COLUMN_WIDTH,
     STATUS_COLUMN_WIDTH,
     ACTION_COLUMN_WIDTH,
   ];
@@ -311,7 +507,7 @@ export function computePolTableScrollX(
 ): number {
   const { includeStatus = false, includeAction = false } = options;
   const extraWidths = [
-    PLATFORM_VARIANT_COLUMN_WIDTH,
+    COMPONENT_PLATFORM_VARIANT_WIDTH,
     QTY_COLUMN_WIDTH,
     QTY_COLUMN_WIDTH,
   ];
@@ -322,6 +518,7 @@ export function computePolTableScrollX(
   if (columnVisibility.remarks !== false) {
     extraWidths.push(REMARKS_COLUMN_WIDTH);
   }
+  extraWidths.push(APPROVED_BY_COLUMN_WIDTH, APPROVED_ON_COLUMN_WIDTH);
   if (includeStatus) {
     extraWidths.push(STATUS_COLUMN_WIDTH);
   }
@@ -389,26 +586,30 @@ export function computeDetachmentTableScrollX(extraColumnWidths: number[]): numb
   return NSN_MPN_DESCRIPTION_WIDTH + extraColumnWidths.reduce((sum, width) => sum + width, 0);
 }
 
-/** LRU tab: Trade, System, Platform/Variant, Required, Available, To-bring, Remarks, Status, Action */
+/** LRU tab: Trade, System, Platform, Variant, Required, Available, To-bring, Remarks, Approved by, Approved on, Status, Action */
 export const LRU_OPERATIONAL_TABLE_SCROLL_X = computeDetachmentTableScrollX([
   TRADE_COLUMN_WIDTH,
   SYSTEM_COLUMN_WIDTH,
-  PLATFORM_VARIANT_COLUMN_WIDTH,
+  COMPONENT_PLATFORM_VARIANT_WIDTH,
   QTY_COLUMN_WIDTH,
   QTY_COLUMN_WIDTH,
   QTY_COLUMN_WIDTH,
   REMARKS_COLUMN_WIDTH,
+  APPROVED_BY_COLUMN_WIDTH,
+  APPROVED_ON_COLUMN_WIDTH,
   STATUS_COLUMN_WIDTH,
   ACTION_COLUMN_WIDTH,
 ]);
 
-/** Consumable tab: Platform/Variant, Required, Available, To-bring, Remarks, Status, Action */
+/** Consumable tab: Platform, Variant, Required, Available, To-bring, Remarks, Approved by, Approved on, Status, Action */
 export const CONSUMABLE_OPERATIONAL_TABLE_SCROLL_X = computeDetachmentTableScrollX([
-  PLATFORM_VARIANT_COLUMN_WIDTH,
+  COMPONENT_PLATFORM_VARIANT_WIDTH,
   QTY_COLUMN_WIDTH,
   QTY_COLUMN_WIDTH,
   QTY_COLUMN_WIDTH,
   REMARKS_COLUMN_WIDTH,
+  APPROVED_BY_COLUMN_WIDTH,
+  APPROVED_ON_COLUMN_WIDTH,
   STATUS_COLUMN_WIDTH,
   ACTION_COLUMN_WIDTH,
 ]);
@@ -416,9 +617,9 @@ export const CONSUMABLE_OPERATIONAL_TABLE_SCROLL_X = computeDetachmentTableScrol
 /** @deprecated Use LRU_OPERATIONAL_TABLE_SCROLL_X or CONSUMABLE_OPERATIONAL_TABLE_SCROLL_X */
 export const DETACHMENT_TABLE_SCROLL_X = LRU_OPERATIONAL_TABLE_SCROLL_X;
 
-/** POL reference table: Platform/Variant, Required, To-bring, UOM, Remarks, Fulfilled */
+/** POL reference table: Platform, Variant, Required, To-bring, UOM, Remarks, Fulfilled */
 export const POL_REFERENCE_TABLE_SCROLL_X = computeDetachmentTableScrollX([
-  PLATFORM_VARIANT_COLUMN_WIDTH,
+  COMPONENT_PLATFORM_VARIANT_WIDTH,
   QTY_COLUMN_WIDTH,
   QTY_COLUMN_WIDTH,
   UOM_COLUMN_WIDTH,

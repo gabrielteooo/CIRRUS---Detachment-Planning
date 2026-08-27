@@ -46,6 +46,8 @@ function getDisplayDescription(line: PlanLine): string {
 const RECOMMENDATION_COLORS = {
   Cannibalise: 'error',
   'Wait for Repair / New buys': 'processing',
+  'Wait for New buys': 'processing',
+  'Expedite New buys': 'warning',
 } as const;
 
 export default function InventoryDrawer({
@@ -59,6 +61,7 @@ export default function InventoryDrawer({
   const availableQty = getGroupAvailableQty(line);
   const rows = buildInventoryRows(line);
   const assessment = assessSupply(line, sparesRequiredBy);
+  const isConsumable = line.componentCategory === 'Consumable';
 
   const columns = [
     {
@@ -126,14 +129,16 @@ export default function InventoryDrawer({
           Supply assessment
         </Typography.Title>
         <dl className="inventory-drawer-supply-list">
-          <div className="inventory-drawer-supply-item">
-            <Typography.Text type="secondary">Repair earliest EDD</Typography.Text>
-            <Typography.Text>
-              {assessment.repairEarliestEdd
-                ? `${formatDate(assessment.repairEarliestEdd)} (${assessment.repairPoNumber})`
-                : '—'}
-            </Typography.Text>
-          </div>
+          {!isConsumable && (
+            <div className="inventory-drawer-supply-item">
+              <Typography.Text type="secondary">Repair earliest EDD</Typography.Text>
+              <Typography.Text>
+                {assessment.repairEarliestEdd
+                  ? `${formatDate(assessment.repairEarliestEdd)} (${assessment.repairPoNumber})`
+                  : '—'}
+              </Typography.Text>
+            </div>
+          )}
           <div className="inventory-drawer-supply-item">
             <Typography.Text type="secondary">New buy earliest EDD</Typography.Text>
             <Typography.Text>

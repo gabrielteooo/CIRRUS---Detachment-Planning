@@ -210,11 +210,11 @@ export function getShortfallQty(line: PlanLine): number {
   return 0;
 }
 
-/** Available minus required; when over-committed, shows to-bring gap vs available. */
+/** Surplus vs required when fulfilled; negative gap (e.g. -1) when to-bring exceeds available. */
 export function getShortfallDelta(line: PlanLine): number {
   if (isPolLine(line)) return line.toBringQty - line.requiredQty;
   if (hasShortfallCondition(line)) {
-    return line.toBringQty - getGroupAvailableQty(line);
+    return getGroupAvailableQty(line) - line.toBringQty;
   }
   return getGroupAvailableQty(line) - line.requiredQty;
 }
@@ -683,9 +683,23 @@ export function applyOfflineApproval(
   return {
     ...line,
     offlineApproval: approval,
-    deviationApproved: getLineStatus(line) === 'Deviation' ? true : line.deviationApproved,
+    deviationApproved:
+      hasDeviationCondition(line) || getLineStatus(line) === 'Deviation'
+        ? true
+        : line.deviationApproved,
     shortfallActions: line.shortfallActions.map((action) => ({ ...action, approved: true })),
   };
+}
+
+export function applyOfflineApprovalToLines(
+  lines: PlanLine[],
+  lineIds: string[],
+  approval: OfflineApprovalRecord,
+): PlanLine[] {
+  const idSet = new Set(lineIds);
+  return lines.map((line) =>
+    idSet.has(line.id) ? applyOfflineApproval(line, approval) : line,
+  );
 }
 
 export function clearOfflineApproval(line: PlanLine): PlanLine {
@@ -698,7 +712,7 @@ export function clearOfflineApproval(line: PlanLine): PlanLine {
 }
 
 export function countApprovalPackLines(lines: PlanLine[]): number {
-  const { shortfalls, deviations } = getApprovalPackLines(lines, 'all');
+  const { shortfalls, deviations } = getApprovalPackLines(lines, 'pending');
   return shortfalls.length + deviations.length;
 }
 

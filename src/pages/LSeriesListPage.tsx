@@ -107,7 +107,7 @@ export default function LSeriesListPage() {
   }, [activePlatforms, platformRecords]);
 
   const uploadMenuItems = useMemo((): MenuProps['items'] => {
-    const newItems = activePlatforms.map((platform) => ({
+    return activePlatforms.map((platform) => ({
       key: `new-${platform}`,
       label: `New ${platform} Template`,
       onClick: () =>
@@ -117,22 +117,7 @@ export default function LSeriesListPage() {
           initialPlatform: platform,
         }),
     }));
-
-    const replaceItems = platformRecords.map((record) => ({
-      key: `replace-${record.id}`,
-      label: `Replace ${record.name}`,
-      onClick: () =>
-        setUploadState({
-          open: true,
-          mode: 'replace' as const,
-          replaceRecord: record,
-        }),
-    }));
-
-    if (replaceItems.length === 0) return newItems;
-
-    return [...newItems, { type: 'divider' as const }, ...replaceItems];
-  }, [activePlatforms, platformRecords]);
+  }, [activePlatforms]);
 
   const closeUploadModal = () => {
     setUploadState((prev) => ({ ...prev, open: false }));

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Button, Card, Input, Popconfirm, Select, Space, Table, Typography } from 'antd';
 import { PlusOutlined, SearchOutlined } from '@ant-design/icons';
 import type { ComponentCategory, LineStatus, PlanLine } from '../../types/planLine';
@@ -11,6 +11,10 @@ import LineStatusTags from './LineStatusTags';
 import type { Platform } from '../../types/detachment';
 import { COMPONENT_CATEGORIES } from '../../data/lSeriesTemplate';
 import {
+  getLineApplicableVariants,
+  parsePlanVariantLabels,
+} from '../../utils/lineVariantUtils';
+import {
   getOperationalComponentColumns,
   getPolReferenceColumns,
   computeOperationalTableScrollX,
@@ -18,6 +22,7 @@ import {
   ACTION_COLUMN_WIDTH,
   STATUS_COLUMN_WIDTH,
   DETACHMENT_TABLE_LAYOUT,
+  type ComponentTableColumnOptions,
 } from './nsnTableColumns';
 import CustomizeColumnsButton, {
   DEFAULT_COMPONENT_COLUMN_VISIBILITY,
@@ -71,6 +76,12 @@ export default function LSeriesTable({
   );
   const addedCount = lines.filter((line) => line.isAddedNsn).length;
   const isPolTab = activeCategory === 'POL';
+  const planVariants = useMemo(() => parsePlanVariantLabels(variant), [variant]);
+
+  const getApplicableVariants = useCallback(
+    (line: PlanLine) => getLineApplicableVariants(line, platform, planVariants),
+    [platform, planVariants],
+  );
 
   useEffect(() => {
     setPage(1);
@@ -88,15 +99,29 @@ export default function LSeriesTable({
     );
   }, [sortedLines, search]);
 
+  const categoryLines = useMemo(
+    () => searchFilteredLines.filter((line) => lineMatchesCategory(line, activeCategory)),
+    [searchFilteredLines, activeCategory],
+  );
+
   const filtered = useMemo(() => {
-    let result = searchFilteredLines.filter((line) => lineMatchesCategory(line, activeCategory));
+    let result = categoryLines;
     if (statusFilter !== 'all') {
       result = result.filter((line) =>
         getLineStatuses(line).includes(statusFilter as LineStatus),
       );
     }
     return result;
-  }, [searchFilteredLines, activeCategory, statusFilter]);
+  }, [categoryLines, statusFilter]);
+
+  const tableColumnOptions = useMemo<ComponentTableColumnOptions>(
+    () => ({
+      lines: categoryLines,
+      planVariants,
+      getApplicableVariants,
+    }),
+    [categoryLines, planVariants, getApplicableVariants],
+  );
 
   const statusAndActionColumns = [
     {
@@ -157,11 +182,20 @@ export default function LSeriesTable({
         variant,
         onViewInventory,
         activeColumnVisibility,
+        tableColumnOptions,
       )
     : [];
 
   const columns = isPolTab
-    ? [...getPolReferenceColumns<PlanLine>(platform, variant, activeColumnVisibility), ...statusAndActionColumns]
+    ? [
+        ...getPolReferenceColumns<PlanLine>(
+          platform,
+          variant,
+          activeColumnVisibility,
+          tableColumnOptions,
+        ),
+        ...statusAndActionColumns,
+      ]
     : [...operationalColumns, ...statusAndActionColumns];
 
   const tableScrollX = isPolTab

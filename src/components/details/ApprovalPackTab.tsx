@@ -6,10 +6,11 @@ import {
   Empty,
   Form,
   Input,
+  Segmented,
   Space,
   Table,
   Typography,
-  message,
+  App,
 } from 'antd';
 import type { Dayjs } from 'dayjs';
 import type { OfflineApprovalRecord, PlanLine } from '../../types/planLine';
@@ -17,9 +18,9 @@ import {
   formatShortfallActions,
   formatDeviationResolution,
   getApprovalPackLines,
-  isLineApprovalComplete,
 } from '../../types/planLine';
 import type { Platform } from '../../types/detachment';
+import ApprovalPackPresenterView from './ApprovalPackPresenterView';
 import {
   getNsnMpnDescriptionColumns,
   getPlatformVariantColumn,
@@ -42,10 +43,13 @@ interface ApprovalPackTabProps {
   viewOnly: boolean;
   onEditLine: (line: PlanLine) => void;
   onViewInventory: (line: PlanLine) => void;
-  onApproveLine: (lineId: string, approval: OfflineApprovalRecord | null) => void;
+  onApproveLines: (lineIds: string[], approval: OfflineApprovalRecord) => void;
+  onSaved?: () => void;
 }
 
-const ACTION_COLUMN_WIDTH = 160;
+const ACTION_COLUMN_WIDTH = 120;
+
+type ApprovalPackViewMode = 'table' | 'presenter';
 
 export default function ApprovalPackTab({
   lines,
@@ -54,19 +58,23 @@ export default function ApprovalPackTab({
   viewOnly,
   onEditLine,
   onViewInventory,
-  onApproveLine,
+  onApproveLines,
+  onSaved,
 }: ApprovalPackTabProps) {
+  const { message } = App.useApp();
   const [approverName, setApproverName] = useState('');
   const [approvedDate, setApprovedDate] = useState<Dayjs | null>(null);
   const [showSignoffValidation, setShowSignoffValidation] = useState(false);
+  const [selectedLineIds, setSelectedLineIds] = useState<Set<string>>(new Set());
+  const [viewMode, setViewMode] = useState<ApprovalPackViewMode>('table');
 
   const { shortfalls, deviations } = useMemo(
-    () => getApprovalPackLines(lines, 'all'),
+    () => getApprovalPackLines(lines, 'pending'),
     [lines],
   );
   const total = shortfalls.length + deviations.length;
 
-  const allPackLines = useMemo(() => {
+  const pendingLines = useMemo(() => {
     const byId = new Map<string, PlanLine>();
     for (const line of [...shortfalls, ...deviations]) {
       byId.set(line.id, line);
@@ -74,9 +82,10 @@ export default function ApprovalPackTab({
     return [...byId.values()];
   }, [shortfalls, deviations]);
 
-  const approvedCount = allPackLines.filter(isLineApprovalComplete).length;
-  const allApproved = allPackLines.length > 0 && approvedCount === allPackLines.length;
-  const someApproved = approvedCount > 0 && !allApproved;
+  const allSelected =
+    pendingLines.length > 0 && pendingLines.every((line) => selectedLineIds.has(line.id));
+  const someSelected =
+    pendingLines.some((line) => selectedLineIds.has(line.id)) && !allSelected;
 
   const approverMissing = !approverName.trim();
   const dateMissing = !approvedDate;
@@ -88,10 +97,18 @@ export default function ApprovalPackTab({
     }
   }, [showSignoffValidation, signoffIncomplete]);
 
+  useEffect(() => {
+    setSelectedLineIds((current) => {
+      const pendingIds = new Set(pendingLines.map((line) => line.id));
+      const next = new Set([...current].filter((id) => pendingIds.has(id)));
+      return next.size === current.size ? current : next;
+    });
+  }, [pendingLines]);
+
   const buildApprovalRecord = (): OfflineApprovalRecord | null => {
     if (signoffIncomplete) {
       setShowSignoffValidation(true);
-      message.error('Enter approving officer and date before approving');
+      message.error('Enter approving officer and date of approval before saving');
       return null;
     }
     return {
@@ -100,43 +117,43 @@ export default function ApprovalPackTab({
     };
   };
 
-  const handleSelectAllApprove = (checked: boolean) => {
+  const handleSelectAll = (checked: boolean) => {
     if (checked) {
-      const approval = buildApprovalRecord();
-      if (!approval) return;
-      let newlyApproved = 0;
-      for (const line of allPackLines) {
-        if (!isLineApprovalComplete(line)) {
-          onApproveLine(line.id, approval);
-          newlyApproved += 1;
-        }
-      }
-      message.success(
-        newlyApproved > 0
-          ? `Approved ${newlyApproved} line${newlyApproved === 1 ? '' : 's'}`
-          : 'All lines already approved',
-      );
+      setSelectedLineIds(new Set(pendingLines.map((line) => line.id)));
       return;
     }
-
-    for (const line of allPackLines) {
-      if (isLineApprovalComplete(line)) {
-        onApproveLine(line.id, null);
-      }
-    }
-    message.success('Approvals removed');
+    setSelectedLineIds(new Set());
   };
 
-  const handleApproveToggle = (line: PlanLine, checked: boolean) => {
-    if (checked) {
-      const approval = buildApprovalRecord();
-      if (!approval) return;
-      onApproveLine(line.id, approval);
-      message.success('Line approved');
+  const handleRowSelect = (lineId: string, checked: boolean) => {
+    setSelectedLineIds((current) => {
+      const next = new Set(current);
+      if (checked) next.add(lineId);
+      else next.delete(lineId);
+      return next;
+    });
+  };
+
+  const handleSave = () => {
+    const lineIdsToApprove = [...selectedLineIds];
+    if (lineIdsToApprove.length === 0) {
+      message.error('Select at least one line to approve');
       return;
     }
-    onApproveLine(line.id, null);
-    message.success('Approval removed');
+
+    const approval = buildApprovalRecord();
+    if (!approval) return;
+
+    onApproveLines(lineIdsToApprove, approval);
+    setSelectedLineIds(new Set());
+
+    const count = lineIdsToApprove.length;
+    message.success(`Saved approval for ${count} line${count === 1 ? '' : 's'}`);
+
+    const remainingPending = pendingLines.filter((line) => !lineIdsToApprove.includes(line.id));
+    if (remainingPending.length === 0) {
+      onSaved?.();
+    }
   };
 
   const actionColumn = {
@@ -144,26 +161,21 @@ export default function ApprovalPackTab({
     key: 'actions',
     width: ACTION_COLUMN_WIDTH,
     fixed: 'right' as const,
-    render: (_: unknown, record: PlanLine) => {
-      const approved = isLineApprovalComplete(record);
-      return (
-        <Space size={4} wrap>
-          {!viewOnly && (
-            <Checkbox
-              checked={approved}
-              onChange={(e) => handleApproveToggle(record, e.target.checked)}
-            >
-              Approve
-            </Checkbox>
-          )}
-          {!viewOnly && (
-            <Button type="link" size="small" onClick={() => onEditLine(record)}>
-              Edit
-            </Button>
-          )}
-        </Space>
-      );
-    },
+    render: (_: unknown, record: PlanLine) => (
+      <Space size={4} wrap>
+        {!viewOnly && (
+          <Checkbox
+            checked={selectedLineIds.has(record.id)}
+            onChange={(event) => handleRowSelect(record.id, event.target.checked)}
+          />
+        )}
+        {!viewOnly && (
+          <Button type="link" size="small" onClick={() => onEditLine(record)}>
+            Edit
+          </Button>
+        )}
+      </Space>
+    ),
   };
 
   const shortfallColumns = [
@@ -203,7 +215,7 @@ export default function ApprovalPackTab({
   if (total === 0) {
     return (
       <Empty
-        description="No items in the approval pack yet. Complete Action required items first."
+        description="No items pending approval. Complete Action required items first, or view saved approvals in Approved."
         style={{ padding: '48px 0' }}
       />
     );
@@ -212,8 +224,8 @@ export default function ApprovalPackTab({
   return (
     <div className="approval-pack-tab">
       <Typography.Paragraph type="secondary" className="approval-pack-tab-intro">
-        Additional requirements and shortfalls with resolution recorded — ready for offline approval
-        presentation.
+        Select the lines to approve, enter approving officer and date of approval, then save.
+        Unchecked lines remain in the approval pack.
       </Typography.Paragraph>
 
       <div
@@ -233,7 +245,7 @@ export default function ApprovalPackTab({
               }
               help={
                 showSignoffValidation && approverMissing
-                  ? 'Enter approving officer before approving lines'
+                  ? 'Enter approving officer before saving'
                   : undefined
               }
             >
@@ -247,14 +259,14 @@ export default function ApprovalPackTab({
           </div>
           <div className="approval-pack-signoff-field approval-pack-signoff-field--date">
             <Typography.Text type="secondary" className="approval-pack-signoff-label">
-              Date
+              Date of approval
             </Typography.Text>
             <Form.Item
               className="approval-pack-signoff-form-item"
               validateStatus={showSignoffValidation && dateMissing ? 'error' : undefined}
               help={
                 showSignoffValidation && dateMissing
-                  ? 'Select approval date before approving lines'
+                  ? 'Select date of approval before saving'
                   : undefined
               }
             >
@@ -270,58 +282,79 @@ export default function ApprovalPackTab({
         {!viewOnly && (
           <div className="approval-pack-signoff-actions">
             <Checkbox
-              checked={allApproved}
-              indeterminate={someApproved}
-              onChange={(event) => handleSelectAllApprove(event.target.checked)}
+              checked={allSelected}
+              indeterminate={someSelected}
+              onChange={(event) => handleSelectAll(event.target.checked)}
             >
               Select all to approve
             </Checkbox>
+            <Button type="primary" onClick={handleSave} disabled={selectedLineIds.size === 0}>
+              Save
+            </Button>
           </div>
         )}
       </div>
 
-      {shortfalls.length > 0 && (
-        <section className="approval-pack-tab-section">
-          <Typography.Title level={5} className="approval-pack-section-title">
-            Shortfalls ({shortfalls.length})
-          </Typography.Title>
-          <div className="detachment-table-container">
-            <Table
-              dataSource={shortfalls}
-              columns={shortfallColumns}
-              rowKey="id"
-              pagination={false}
-              size="small"
-              tableLayout={DETACHMENT_TABLE_LAYOUT}
-              scroll={{ x: APPROVAL_PACK_SHORTFALL_SCROLL_X + ACTION_COLUMN_WIDTH }}
-          rowClassName={(record) =>
-            isLineApprovalComplete(record) ? 'row-approved' : ''
-          }
-            />
-          </div>
-        </section>
-      )}
+      <div className="approval-pack-view-toggle">
+        <Segmented<ApprovalPackViewMode>
+          value={viewMode}
+          onChange={setViewMode}
+          options={[
+            { label: 'Table view', value: 'table' },
+            { label: 'Presenter view', value: 'presenter' },
+          ]}
+        />
+      </div>
 
-      {deviations.length > 0 && (
-        <section className="approval-pack-tab-section">
-          <Typography.Title level={5} className="approval-pack-section-title">
-            Additional requirements ({deviations.length})
-          </Typography.Title>
-          <div className="detachment-table-container">
-            <Table
-              dataSource={deviations}
-              columns={deviationColumns}
-              rowKey="id"
-              pagination={false}
-              size="small"
-              tableLayout={DETACHMENT_TABLE_LAYOUT}
-              scroll={{ x: APPROVAL_PACK_DEVIATION_SCROLL_X + ACTION_COLUMN_WIDTH }}
-              rowClassName={(record) =>
-                isLineApprovalComplete(record) ? 'row-approved' : ''
-              }
-            />
-          </div>
-        </section>
+      {viewMode === 'presenter' ? (
+        <ApprovalPackPresenterView
+          shortfalls={shortfalls}
+          deviations={deviations}
+          viewOnly={viewOnly}
+          selectedLineIds={selectedLineIds}
+          onSelectLine={handleRowSelect}
+          onEditLine={onEditLine}
+        />
+      ) : (
+        <>
+          {shortfalls.length > 0 && (
+            <section className="approval-pack-tab-section">
+              <Typography.Title level={5} className="approval-pack-section-title">
+                Shortfalls ({shortfalls.length})
+              </Typography.Title>
+              <div className="detachment-table-container">
+                <Table
+                  dataSource={shortfalls}
+                  columns={shortfallColumns}
+                  rowKey="id"
+                  pagination={false}
+                  size="small"
+                  tableLayout={DETACHMENT_TABLE_LAYOUT}
+                  scroll={{ x: APPROVAL_PACK_SHORTFALL_SCROLL_X + ACTION_COLUMN_WIDTH }}
+                />
+              </div>
+            </section>
+          )}
+
+          {deviations.length > 0 && (
+            <section className="approval-pack-tab-section">
+              <Typography.Title level={5} className="approval-pack-section-title">
+                Additional requirements ({deviations.length})
+              </Typography.Title>
+              <div className="detachment-table-container">
+                <Table
+                  dataSource={deviations}
+                  columns={deviationColumns}
+                  rowKey="id"
+                  pagination={false}
+                  size="small"
+                  tableLayout={DETACHMENT_TABLE_LAYOUT}
+                  scroll={{ x: APPROVAL_PACK_DEVIATION_SCROLL_X + ACTION_COLUMN_WIDTH }}
+                />
+              </div>
+            </section>
+          )}
+        </>
       )}
     </div>
   );
