@@ -217,11 +217,11 @@ export default function CreatePlanModal({
           <Col span={12}>
             <Form.Item
               name="detachmentId"
-              label="Detachment"
-              rules={[{ required: true, message: 'Select a detachment' }]}
+              label="Detachment/ Exercise"
+              rules={[{ required: true, message: 'Select a detachment/exercise' }]}
             >
               <Select
-                placeholder="Select detachment"
+                placeholder="Select detachment/exercise"
                 options={detachments.map((d) => ({
                   label: d.name,
                   value: d.id,
@@ -283,12 +283,12 @@ export default function CreatePlanModal({
               name="planDetachmentDates"
               label={
                 <FieldLabel
-                  label="Plan detachment date"
-                  tooltip="Adjust your platform plan dates within the detachment window."
+                  label="Deployment Period"
+                  tooltip="Adjust your platform plan dates within the detachment/exercise window."
                 />
               }
               rules={[
-                { required: true, message: 'Select plan detachment dates' },
+                { required: true, message: 'Select deployment period' },
                 {
                   validator: (_, value: [Dayjs, Dayjs] | undefined) => {
                     if (!value?.[0] || !value?.[1] || !selectedDetachment) {
@@ -303,7 +303,7 @@ export default function CreatePlanModal({
                     );
                     if (!withinParent) {
                       return Promise.reject(
-                        new Error('Plan dates must fall within the detachment date range'),
+                        new Error('Deployment period must fall within the detachment/exercise date range'),
                       );
                     }
                     if (value[1].isBefore(value[0], 'day')) {
@@ -333,7 +333,7 @@ export default function CreatePlanModal({
         </Row>
 
         <Row gutter={16}>
-          <Col span={12}>
+          <Col span={lockedPlatform === 'F-16' ? 12 : 24}>
             <Form.Item
               name="tailNumbers"
               label="Tail"
@@ -345,38 +345,6 @@ export default function CreatePlanModal({
                 options={tailOptions}
                 disabled={!platform}
                 onChange={handleTailNumbersChange}
-              />
-            </Form.Item>
-          </Col>
-          <Col span={12}>
-            <Form.Item
-              name="variants"
-              label="Variant"
-              rules={[{ required: true, message: 'Select tail numbers to derive variants' }]}
-            >
-              <Select
-                mode="multiple"
-                placeholder="Auto-filled from tail numbers"
-                open={false}
-                disabled
-              />
-            </Form.Item>
-          </Col>
-        </Row>
-
-        <Row gutter={16}>
-          <Col span={lockedPlatform === 'F-16' ? 12 : 24}>
-            <Form.Item
-              name="aircraftCount"
-              label="No. of aircraft"
-              rules={positiveIntegerRules('Enter number of aircraft')}
-            >
-              <InputNumber
-                style={{ width: '100%' }}
-                min={1}
-                precision={0}
-                placeholder="Enter number of aircraft"
-                disabled={!platform}
               />
             </Form.Item>
           </Col>
@@ -403,6 +371,38 @@ export default function CreatePlanModal({
               </Form.Item>
             </Col>
           )}
+        </Row>
+
+        <Row gutter={16}>
+          <Col span={12}>
+            <Form.Item
+              name="variants"
+              label="Variant"
+              rules={[{ required: true, message: 'Select tail numbers to derive variants' }]}
+            >
+              <Select
+                mode="multiple"
+                placeholder="Auto-filled from tail numbers"
+                open={false}
+                disabled
+              />
+            </Form.Item>
+          </Col>
+          <Col span={12}>
+            <Form.Item
+              name="aircraftCount"
+              label="No. of aircraft"
+              rules={positiveIntegerRules('Enter number of aircraft')}
+            >
+              <InputNumber
+                style={{ width: '100%' }}
+                min={1}
+                precision={0}
+                placeholder="Auto-filled from tail numbers"
+                disabled
+              />
+            </Form.Item>
+          </Col>
         </Row>
 
         <Form.Item name="remarks" label="Plan remarks (optional)">

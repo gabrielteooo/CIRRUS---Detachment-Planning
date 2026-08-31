@@ -54,9 +54,11 @@ export default function DeviationSummary({
   const columns = [
     ...getNsnMpnDescriptionColumns<PlanLine>(),
     getPlatformVariantColumn<PlanLine>(platform, variant),
-    getRequiredColumn<PlanLine>(),
-    getAvailableColumn<PlanLine>(getAvailableColumnLinkRenderer(onViewInventory)),
-    getSummaryToBringColumn<PlanLine>(),
+    getRequiredColumn<PlanLine>(deviationLines),
+    getSummaryToBringColumn<PlanLine>(deviationLines),
+    getAvailableColumn<PlanLine>(getAvailableColumnLinkRenderer(onViewInventory), {
+      lines: deviationLines,
+    }),
     {
       title: 'Reason / Remarks',
       key: 'deviationResolution',

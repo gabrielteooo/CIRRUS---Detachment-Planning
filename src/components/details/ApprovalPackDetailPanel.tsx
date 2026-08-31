@@ -126,20 +126,20 @@ export default function ApprovalPackDetailPanel({
         <MetricCell label="To-bring" value={line.toBringQty} />
         {showShortfallDelta ? (
           <MetricCell
-            label="Delta"
+            label="Shortfall"
             value={shortfallDelta}
             highlight
             info="Gap between available stock and to-bring qty"
           />
         ) : showDeviationDelta ? (
           <MetricCell
-            label="Delta"
+            label="Deviation"
             value={formatDeviationDeltaValue(deviationDelta)}
             deviationHighlight
             info="Difference between to-bring and L-series required qty"
           />
         ) : (
-          <MetricCell label="Delta" value={shortfallDelta} />
+          <MetricCell label="Shortfall" value={shortfallDelta} />
         )}
       </div>
 
@@ -215,7 +215,7 @@ export default function ApprovalPackDetailPanel({
           </Typography.Text>
           {showShortfallDelta && showDeviationDelta && (
             <Typography.Text type="secondary" className="approval-pack-presenter-deviation-delta-note">
-              Deviation delta: {formatDeviationDeltaValue(deviationDelta)}
+              Deviation: {formatDeviationDeltaValue(deviationDelta)}
             </Typography.Text>
           )}
           <Typography.Paragraph className="approval-pack-presenter-reason-readonly">

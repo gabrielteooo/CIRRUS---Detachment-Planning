@@ -11,10 +11,7 @@ import { formatDate } from '../../utils/planUtils';
 import {
   getNsnMpnDescriptionColumns,
   getPlatformVariantColumn,
-  getRequiredColumn,
-  getAvailableColumn,
-  getAvailableColumnLinkRenderer,
-  getToBringColumn,
+  getRequiredToBringInWarehouseColumns,
   getSummaryShortfallDeltaColumn,
   getSummaryDeviationDeltaColumn,
   DETACHMENT_TABLE_LAYOUT,
@@ -30,6 +27,7 @@ interface ApprovedTabProps {
   viewOnly: boolean;
   onEditLine: (line: PlanLine) => void;
   onViewInventory: (line: PlanLine) => void;
+  onViewNsn: (line: PlanLine) => void;
 }
 
 const APPROVAL_META_COLUMN_WIDTH = 140;
@@ -65,6 +63,7 @@ export default function ApprovedTab({
   viewOnly,
   onEditLine,
   onViewInventory,
+  onViewNsn,
 }: ApprovedTabProps) {
   const { shortfalls, deviations } = useMemo(
     () => getApprovalPackLines(lines, 'approved'),
@@ -86,11 +85,9 @@ export default function ApprovedTab({
   };
 
   const shortfallColumns = [
-    ...getNsnMpnDescriptionColumns<PlanLine>(),
+    ...getNsnMpnDescriptionColumns<PlanLine>(onViewNsn),
     getPlatformVariantColumn<PlanLine>(platform, variant),
-    getRequiredColumn<PlanLine>(),
-    getAvailableColumn<PlanLine>(getAvailableColumnLinkRenderer(onViewInventory)),
-    getToBringColumn<PlanLine>(),
+    ...getRequiredToBringInWarehouseColumns<PlanLine>(onViewInventory, { lines: shortfalls }),
     getSummaryShortfallDeltaColumn<PlanLine>(),
     {
       title: 'Resolution',
@@ -105,11 +102,9 @@ export default function ApprovedTab({
   ];
 
   const deviationColumns = [
-    ...getNsnMpnDescriptionColumns<PlanLine>(),
+    ...getNsnMpnDescriptionColumns<PlanLine>(onViewNsn),
     getPlatformVariantColumn<PlanLine>(platform, variant),
-    getRequiredColumn<PlanLine>(),
-    getAvailableColumn<PlanLine>(getAvailableColumnLinkRenderer(onViewInventory)),
-    getToBringColumn<PlanLine>(),
+    ...getRequiredToBringInWarehouseColumns<PlanLine>(onViewInventory, { lines: deviations }),
     getSummaryDeviationDeltaColumn<PlanLine>(80),
     {
       title: 'Reason / Remarks',

@@ -1,7 +1,10 @@
 import { useMemo, useState } from 'react';
 import { Empty, Table, Typography } from 'antd';
 import type { PlanLine } from '../../types/planLine';
-import { getLineActionLabel, getWorkQueueLines, isPolLine } from '../../types/planLine';
+import {
+  formatAwaitingSparesResolution,
+  getAwaitingSparesLines,
+} from '../../types/planLine';
 import type { Platform } from '../../types/detachment';
 import {
   getNsnMpnDescriptionColumns,
@@ -12,9 +15,9 @@ import {
   getAvailableColumnLinkRenderer,
   getMrpControllerColumn,
   getSummaryEditColumn,
-  getSummaryShortfallDeltaColumn,
   DETACHMENT_TABLE_LAYOUT,
-  computeWorkQueueTableScrollX,
+  computeAwaitingSparesTableScrollX,
+  FLEX_TEXT_COLUMN_MIN_WIDTH,
 } from './nsnTableColumns';
 import CustomizeColumnsButton, {
   DEFAULT_WORK_QUEUE_COLUMN_VISIBILITY,
@@ -22,7 +25,7 @@ import CustomizeColumnsButton, {
   type WorkQueueColumnVisibility,
 } from './CustomizeColumnsButton';
 
-interface WorkQueueTabProps {
+interface AwaitingSparesTabProps {
   lines: PlanLine[];
   platform: Platform;
   variant: string;
@@ -32,7 +35,7 @@ interface WorkQueueTabProps {
   onViewNsn: (line: PlanLine) => void;
 }
 
-export default function WorkQueueTab({
+export default function AwaitingSparesTab({
   lines,
   platform,
   variant,
@@ -40,17 +43,15 @@ export default function WorkQueueTab({
   onEditLine,
   onViewInventory,
   onViewNsn,
-}: WorkQueueTabProps) {
+}: AwaitingSparesTabProps) {
   const [columnVisibility, setColumnVisibility] = useState<WorkQueueColumnVisibility>(
     DEFAULT_WORK_QUEUE_COLUMN_VISIBILITY,
   );
-  const queueLines = getWorkQueueLines(lines);
+  const awaitingSparesLines = getAwaitingSparesLines(lines);
   const showMrpController = columnVisibility.mrpController === true;
 
   const columns = useMemo(() => {
-    const next = [
-      ...getNsnMpnDescriptionColumns<PlanLine>(onViewNsn),
-    ];
+    const next = [...getNsnMpnDescriptionColumns<PlanLine>(onViewNsn)];
 
     if (showMrpController) {
       next.push(getMrpControllerColumn<PlanLine>());
@@ -58,15 +59,19 @@ export default function WorkQueueTab({
 
     next.push(
       getPlatformVariantColumn<PlanLine>(platform, variant),
-      getRequiredColumn<PlanLine>(queueLines),
-      getToBringColumn<PlanLine>(queueLines),
+      getRequiredColumn<PlanLine>(awaitingSparesLines),
+      getToBringColumn<PlanLine>(awaitingSparesLines),
       getAvailableColumn<PlanLine>(getAvailableColumnLinkRenderer(onViewInventory), {
-        lines: queueLines,
+        lines: awaitingSparesLines,
       }),
-      getSummaryShortfallDeltaColumn<PlanLine>(),
-      getSummaryEditColumn<PlanLine>(viewOnly, onEditLine, (line) =>
-        isPolLine(line) ? 'Edit' : getLineActionLabel(line),
-      ),
+      {
+        title: 'Resolution',
+        key: 'resolution',
+        width: FLEX_TEXT_COLUMN_MIN_WIDTH,
+        ellipsis: true,
+        render: (_: unknown, record: PlanLine) => formatAwaitingSparesResolution(record),
+      },
+      getSummaryEditColumn<PlanLine>(viewOnly, onEditLine, 'Edit'),
     );
 
     return next;
@@ -78,18 +83,18 @@ export default function WorkQueueTab({
     onViewInventory,
     viewOnly,
     onEditLine,
-    queueLines,
+    awaitingSparesLines,
   ]);
 
   const tableScrollX = useMemo(
-    () => computeWorkQueueTableScrollX(columnVisibility),
+    () => computeAwaitingSparesTableScrollX(columnVisibility),
     [columnVisibility],
   );
 
-  if (queueLines.length === 0) {
+  if (awaitingSparesLines.length === 0) {
     return (
       <Empty
-        description="No items require action — all shortfalls and deviations have been recorded."
+        description="No items awaiting spares — resolve shortfalls with an awaiting spares path to monitor them here."
         style={{ padding: '48px 0' }}
       />
     );
@@ -99,8 +104,8 @@ export default function WorkQueueTab({
     <div>
       <div className="lseries-table-toolbar">
         <Typography.Paragraph type="secondary" style={{ marginBottom: 0, flex: 1 }}>
-          These items require your action. Record a resolution — awaiting spares is fulfilled
-          without approval; accept shortfall and cannibalise move to the Approval pack.
+          These lines are fulfilled with an awaiting spares resolution and do not require approval.
+          Monitor supply progress here — change the resolution if plans shift.
         </Typography.Paragraph>
         <CustomizeColumnsButton
           options={WORK_QUEUE_COLUMN_OPTIONS}
@@ -112,7 +117,7 @@ export default function WorkQueueTab({
       </div>
       <div className="detachment-table-container">
         <Table
-          dataSource={queueLines}
+          dataSource={awaitingSparesLines}
           columns={columns}
           rowKey="id"
           pagination={false}

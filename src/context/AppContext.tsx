@@ -29,6 +29,7 @@ import {
   countShortfalls,
 } from '../types/planLine';
 import { getDefaultPlanLinesForPlan } from '../utils/generatePlanLines';
+import { clonePlanLinesForDuplicate } from '../utils/duplicatePlan';
 import { isPastDetachment } from '../utils/planUtils';
 import { getPlansForDetachment } from '../utils/planUtils';
 
@@ -47,6 +48,10 @@ interface AppContextValue {
   updatePlan: (planId: string, updates: Partial<PlatformPlan>) => void;
   createDetachment: (input: CreateDetachmentInput) => Detachment;
   createPlan: (input: CreatePlanInput) => PlatformPlan;
+  duplicatePlan: (
+    sourcePlanId: string,
+    input: DuplicatePlanInput,
+  ) => { ok: true; plan: PlatformPlan } | { ok: false; message: string };
   lSeriesRecords: LSeriesRecord[];
   getLSeriesRecord: (id: string) => LSeriesRecord | undefined;
   getLSeriesByPlatformMission: (
@@ -79,6 +84,14 @@ export interface CreatePlanInput {
   aircraftCount: number;
   flyingHours?: number;
   variantRows: PlanVariantRow[];
+  remarks?: string;
+}
+
+export interface DuplicatePlanInput {
+  detachmentId: string;
+  planDateStart: string;
+  planDateEnd: string;
+  needByDate: string;
   remarks?: string;
 }
 
@@ -263,6 +276,53 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [lSeriesRecords],
   );
 
+  const duplicatePlan = useCallback(
+    (
+      sourcePlanId: string,
+      input: DuplicatePlanInput,
+    ): { ok: true; plan: PlatformPlan } | { ok: false; message: string } => {
+      const sourcePlan = plans.find((plan) => plan.id === sourcePlanId);
+      const sourceLines = planLinesMap[sourcePlanId];
+
+      if (!sourcePlan || !sourceLines) {
+        return { ok: false, message: 'Source plan not found.' };
+      }
+
+      const platformConflict = plans.some(
+        (plan) =>
+          plan.detachmentId === input.detachmentId && plan.platform === sourcePlan.platform,
+      );
+      if (platformConflict) {
+        return {
+          ok: false,
+          message: `A ${sourcePlan.platform} plan already exists for this detachment/exercise.`,
+        };
+      }
+
+      const id = `plan-${Date.now()}`;
+      const newPlan: PlatformPlan = {
+        ...sourcePlan,
+        id,
+        detachmentId: input.detachmentId,
+        planDateStart: input.planDateStart,
+        planDateEnd: input.planDateEnd,
+        needByDate: input.needByDate,
+        remarks: input.remarks ?? sourcePlan.remarks,
+        status: 'Draft',
+        createdBy: PLANNER_USER.id,
+        createdByName: PLANNER_USER.name,
+        lastUpdated: new Date().toISOString(),
+      };
+
+      const lines = clonePlanLinesForDuplicate(sourceLines, id);
+      const synced = syncPlanMetrics(newPlan, lines);
+      setPlans((prev) => [synced, ...prev]);
+      setPlanLinesMap((prev) => ({ ...prev, [id]: lines }));
+      return { ok: true, plan: synced };
+    },
+    [plans, planLinesMap],
+  );
+
   const value = useMemo(
     () => ({
       role,
@@ -279,6 +339,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       updatePlan,
       createDetachment,
       createPlan,
+      duplicatePlan,
       lSeriesRecords,
       getLSeriesRecord,
       getLSeriesByPlatformMission,
@@ -303,6 +364,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       updatePlan,
       createDetachment,
       createPlan,
+      duplicatePlan,
       lSeriesRecords,
       getLSeriesRecord,
       getLSeriesByPlatformMission,

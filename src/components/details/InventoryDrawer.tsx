@@ -3,7 +3,12 @@ import type { PlanLine } from '../../types/planLine';
 import { getGroupAvailableQty, isInterchangeableLine } from '../../types/planLine';
 import { formatDate } from '../../utils/planUtils';
 import { assessSupply } from '../../utils/supplyAssessment';
-import { QTY_COLUMN_WIDTH } from './nsnTableColumns';
+import {
+  TO_BRING_HUG_COLUMN_WIDTH,
+  WAREHOUSE_HUG_COLUMN_WIDTH,
+  getNumericQtySortFilter,
+  withTableHugColumn,
+} from './nsnTableColumns';
 
 interface InventoryDrawerProps {
   line: PlanLine | null;
@@ -75,8 +80,22 @@ export default function InventoryDrawer({
       dataIndex: 'description',
       ellipsis: true,
     },
-    { title: 'Available', dataIndex: 'availableQty', width: QTY_COLUMN_WIDTH },
-    { title: 'To-bring', dataIndex: 'toBringQty', width: QTY_COLUMN_WIDTH },
+    withTableHugColumn(
+      {
+        title: 'Warehouse',
+        dataIndex: 'availableQty',
+        ...getNumericQtySortFilter((record) => record.availableQty, rows),
+      },
+      WAREHOUSE_HUG_COLUMN_WIDTH,
+    ),
+    withTableHugColumn(
+      {
+        title: 'To-bring',
+        dataIndex: 'toBringQty',
+        ...getNumericQtySortFilter((record) => record.toBringQty, rows),
+      },
+      TO_BRING_HUG_COLUMN_WIDTH,
+    ),
   ];
 
   return (

@@ -4,10 +4,12 @@ import type { PlanLine } from '../../types/planLine';
 import {
   computeFillRate,
   computeShortfallResolvedProgress,
+  getAcceptShortfallEntries,
   getCannibalisedEntries,
   getWaitEntries,
 } from '../../types/planLine';
 import { fillRateColor } from '../../data/mockPlans';
+import AcceptShortfallModal from './AcceptShortfallModal';
 import CannibalisedModal from './CannibalisedModal';
 import WaitModal from './WaitModal';
 
@@ -40,12 +42,14 @@ function KpiInsightCard({ title, count, onViewDetails }: KpiInsightCardProps) {
 export default function KpiStrip({ lines }: KpiStripProps) {
   const [cannibalisedModalOpen, setCannibalisedModalOpen] = useState(false);
   const [waitModalOpen, setWaitModalOpen] = useState(false);
+  const [acceptShortfallModalOpen, setAcceptShortfallModalOpen] = useState(false);
 
   const fillRate = useMemo(() => computeFillRate(lines), [lines]);
   const { resolved: shortfallsResolved, total: shortfallTotal } =
     computeShortfallResolvedProgress(lines);
   const cannibalisedEntries = useMemo(() => getCannibalisedEntries(lines), [lines]);
   const waitEntries = useMemo(() => getWaitEntries(lines), [lines]);
+  const acceptShortfallEntries = useMemo(() => getAcceptShortfallEntries(lines), [lines]);
 
   return (
     <>
@@ -77,11 +81,18 @@ export default function KpiStrip({ lines }: KpiStripProps) {
             onViewDetails={() => setCannibalisedModalOpen(true)}
           />
         </Col>
-        <Col xs={24} sm={6} flex="1 1 0">
+        <Col xs={24} sm={12} lg={6} flex="1 1 0">
           <KpiInsightCard
             title="Awaiting Supply"
             count={waitEntries.length}
             onViewDetails={() => setWaitModalOpen(true)}
+          />
+        </Col>
+        <Col xs={24} sm={12} lg={6} flex="1 1 0">
+          <KpiInsightCard
+            title="Accept Shortfall"
+            count={acceptShortfallEntries.length}
+            onViewDetails={() => setAcceptShortfallModalOpen(true)}
           />
         </Col>
       </Row>
@@ -95,6 +106,11 @@ export default function KpiStrip({ lines }: KpiStripProps) {
         open={waitModalOpen}
         entries={waitEntries}
         onClose={() => setWaitModalOpen(false)}
+      />
+      <AcceptShortfallModal
+        open={acceptShortfallModalOpen}
+        entries={acceptShortfallEntries}
+        onClose={() => setAcceptShortfallModalOpen(false)}
       />
     </>
   );

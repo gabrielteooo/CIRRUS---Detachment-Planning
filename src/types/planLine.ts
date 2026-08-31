@@ -101,6 +101,8 @@ export interface PlanLine {
   mpn?: string;
   trade?: string;
   system?: string;
+  /** SAP MRP controller (F-16 field RXX). */
+  mrpController?: string;
   /** Component notes from L-series template (shown on LRU / Consumable / POL tabs). */
   remarks?: string;
   /** @deprecated POL fulfilment is derived from to-bring vs required qty. */
@@ -155,6 +157,27 @@ export function hasShortfallCondition(line: PlanLine): boolean {
   return line.toBringQty > getGroupAvailableQty(line);
 }
 
+export function hasAwaitingSparesResolution(line: PlanLine): boolean {
+  return line.shortfallActions.some((action) => action.type === 'wait');
+}
+
+/** Shortfall resolved only via awaiting spares — fulfilled without approval. */
+export function isAwaitingSparesOnlyShortfallResolution(line: PlanLine): boolean {
+  if (!hasShortfallCondition(line)) return false;
+  if (line.shortfallActions.length === 0) return false;
+  return line.shortfallActions.every((action) => action.type === 'wait');
+}
+
+export function getAwaitingSparesLines(lines: PlanLine[]): PlanLine[] {
+  return getOperationalLines(lines).filter(
+    (line) => hasShortfallCondition(line) && hasAwaitingSparesResolution(line),
+  );
+}
+
+export function countAwaitingSparesLines(lines: PlanLine[]): number {
+  return getAwaitingSparesLines(lines).length;
+}
+
 /**
  * Accept shortfall is only valid when stock is insufficient but to-bring still matches
  * the L-series requirement. Upward deviation (to-bring above required) that creates
@@ -175,7 +198,16 @@ export function hasDeviationCondition(line: PlanLine): boolean {
 /** No shortfall or deviation conditions — available covers to-bring and to-bring matches required. */
 export function isLineFulfilled(line: PlanLine): boolean {
   if (isPolLine(line)) return getPolLineStatus(line) === 'Met';
-  return !hasShortfallCondition(line) && !hasDeviationCondition(line);
+
+  if (hasDeviationCondition(line) && !hasDeviationResolutionRecorded(line)) {
+    return false;
+  }
+
+  if (!hasShortfallCondition(line)) {
+    return !hasDeviationCondition(line);
+  }
+
+  return isAwaitingSparesOnlyShortfallResolution(line);
 }
 
 /** Active statuses for a line (shortfall and deviation can coexist). */
@@ -185,7 +217,12 @@ export function getLineStatuses(line: PlanLine): LineStatus[] {
     return status === 'Met' ? ['Met'] : [status];
   }
   const statuses: LineStatus[] = [];
-  if (hasShortfallCondition(line)) statuses.push('Shortfall');
+  if (
+    hasShortfallCondition(line) &&
+    !isAwaitingSparesOnlyShortfallResolution(line)
+  ) {
+    statuses.push('Shortfall');
+  }
   if (hasDeviationCondition(line)) statuses.push('Deviation');
   if (statuses.length === 0) statuses.push('Met');
   return statuses;
@@ -376,6 +413,34 @@ export function getWaitEntries(lines: PlanLine[]): WaitEntry[] {
   return entries;
 }
 
+export interface AcceptShortfallEntry {
+  lineId: string;
+  nsn: string;
+  description: string;
+  qty: number;
+  remarks: string;
+}
+
+/** Shortfall resolutions that include accept (one entry per accept action). */
+export function getAcceptShortfallEntries(lines: PlanLine[]): AcceptShortfallEntry[] {
+  const entries: AcceptShortfallEntry[] = [];
+
+  for (const line of lines) {
+    for (const action of line.shortfallActions) {
+      if (action.type !== 'accept') continue;
+      entries.push({
+        lineId: line.id,
+        nsn: line.nsn,
+        description: line.description,
+        qty: action.qty,
+        remarks: action.remarks.trim() || '—',
+      });
+    }
+  }
+
+  return entries;
+}
+
 export function countShortfalls(lines: PlanLine[]): number {
   return getOperationalLines(lines).filter((l) => hasShortfallCondition(l)).length;
 }
@@ -451,6 +516,10 @@ export function computeToBringQty(
 /** @deprecated Use computeToBringQty */
 export function computeToBringFromShortfallActions(actions: ShortfallAction[]): number {
   return sumShortfallActionQty(actions);
+}
+
+export function formatAwaitingSparesResolution(line: PlanLine): string {
+  return formatShortfallActions(line.shortfallActions.filter((action) => action.type === 'wait'));
 }
 
 export function formatShortfallActions(actions: ShortfallAction[]): string {
@@ -558,7 +627,10 @@ export function getLineActionLabel(line: PlanLine): 'Resolve' | 'Edit' | 'Deviat
 }
 
 export function lineNeedsShortfallApproval(line: PlanLine): boolean {
-  return hasShortfallCondition(line) && line.shortfallActions.length > 0;
+  if (!hasShortfallCondition(line)) return false;
+  return line.shortfallActions.some(
+    (action) => action.type === 'accept' || action.type === 'cannibalise',
+  );
 }
 
 export function lineNeedsDeviationApproval(line: PlanLine): boolean {
@@ -664,9 +736,7 @@ export function getApprovalPackLines(
 
   return {
     shortfalls: sortUnapprovedFirst(
-      filtered.filter(
-        (l) => hasShortfallCondition(l) && l.shortfallActions.length > 0,
-      ),
+      filtered.filter((l) => lineNeedsShortfallApproval(l)),
     ),
     deviations: sortUnapprovedFirst(
       filtered.filter(

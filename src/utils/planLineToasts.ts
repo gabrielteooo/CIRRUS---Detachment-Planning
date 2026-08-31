@@ -4,6 +4,8 @@ import {
   hasResolutionRecorded,
   hasShortfallCondition,
   hasDeviationCondition,
+  isAwaitingSparesOnlyShortfallResolution,
+  lineNeedsShortfallApproval,
   type PlanLine,
 } from '../types/planLine';
 
@@ -17,6 +19,13 @@ function showDarkSuccess(messageApi: MessageInstance, content: string) {
       className: DARK_MESSAGE_CLASS,
     });
   }, 0);
+}
+
+export function showAwaitingSparesToast(messageApi: MessageInstance, nsn: string) {
+  showDarkSuccess(
+    messageApi,
+    `Awaiting spares recorded. ${nsn} is fulfilled — monitor progress in Awaiting spares`,
+  );
 }
 
 export function showShortfallResolutionToast(messageApi: MessageInstance, nsn: string) {
@@ -60,7 +69,32 @@ export function showPlanLineSaveToast(
     after.shortfallActions.length > 0 &&
     before.shortfallActions.length === 0
   ) {
+    if (isAwaitingSparesOnlyShortfallResolution(after)) {
+      showAwaitingSparesToast(messageApi, after.nsn);
+    } else if (lineNeedsShortfallApproval(after)) {
+      showShortfallResolutionToast(messageApi, after.nsn);
+    }
+    return;
+  }
+
+  if (
+    hasShortfallCondition(after) &&
+    lineNeedsShortfallApproval(after) &&
+    isAwaitingSparesOnlyShortfallResolution(before) &&
+    !isAwaitingSparesOnlyShortfallResolution(after)
+  ) {
     showShortfallResolutionToast(messageApi, after.nsn);
+    return;
+  }
+
+  if (
+    hasShortfallCondition(after) &&
+    isAwaitingSparesOnlyShortfallResolution(after) &&
+    before.shortfallActions.length > 0 &&
+    lineNeedsShortfallApproval(before) &&
+    !lineNeedsShortfallApproval(after)
+  ) {
+    showAwaitingSparesToast(messageApi, after.nsn);
     return;
   }
 

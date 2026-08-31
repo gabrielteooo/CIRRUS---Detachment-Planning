@@ -1,5 +1,7 @@
 import type { NsnCatalogEntry } from '../data/nsnCatalog';
+import type { Platform } from '../types/detachment';
 import type { InventoryItem, PlanLine } from '../types/planLine';
+import { mockMrpController } from './mrpController';
 
 function buildInventory(
   nsn: string,
@@ -52,6 +54,7 @@ export function createAddedPlanLine(
   entry: NsnCatalogEntry,
   index: number,
   deviationReason: string,
+  platform?: Platform,
 ): PlanLine {
   const requiredQty = 0;
   const availableQty = entry.availableQty;
@@ -68,6 +71,7 @@ export function createAddedPlanLine(
     shortfallActions: [],
     isAddedNsn: true,
     deviationReason,
+    mrpController: platform ? mockMrpController(platform, entry.nsn) : undefined,
   };
 }
 
@@ -75,10 +79,11 @@ export function createAddedPlanLines(
   planId: string,
   entries: NsnCatalogEntry[],
   deviationReason: string,
+  platform?: Platform,
 ): PlanLine[] {
   const timestamp = Date.now();
   return entries.map((entry, index) => ({
-    ...createAddedPlanLine(planId, entry, index, deviationReason),
+    ...createAddedPlanLine(planId, entry, index, deviationReason, platform),
     id: `${planId}-added-${timestamp}-${index}`,
   }));
 }

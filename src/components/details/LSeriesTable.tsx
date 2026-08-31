@@ -36,6 +36,7 @@ interface LSeriesTableProps {
   viewOnly: boolean;
   onEditLine: (line: PlanLine) => void;
   onViewInventory: (line: PlanLine) => void;
+  onViewNsn?: (line: PlanLine) => void;
   onAddNsn?: () => void;
   onDeleteLine?: (line: PlanLine) => void;
 }
@@ -64,6 +65,7 @@ export default function LSeriesTable({
   viewOnly,
   onEditLine,
   onViewInventory,
+  onViewNsn,
   onAddNsn,
   onDeleteLine,
 }: LSeriesTableProps) {
@@ -183,6 +185,7 @@ export default function LSeriesTable({
         onViewInventory,
         activeColumnVisibility,
         tableColumnOptions,
+        onViewNsn,
       )
     : [];
 

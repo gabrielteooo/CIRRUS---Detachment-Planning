@@ -63,8 +63,10 @@ export default function ShortfallSummary({
   const columns = [
     ...getNsnMpnDescriptionColumns<PlanLine>(),
     getPlatformVariantColumn<PlanLine>(platform, variant),
-    getRequiredColumn<PlanLine>(),
-    getAvailableColumn<PlanLine>(getAvailableColumnLinkRenderer(onViewInventory)),
+    getRequiredColumn<PlanLine>(shortfallLines),
+    getAvailableColumn<PlanLine>(getAvailableColumnLinkRenderer(onViewInventory), {
+      lines: shortfallLines,
+    }),
     getSummaryShortfallDeltaColumn<PlanLine>(),
     {
       title: 'Resolution',

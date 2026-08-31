@@ -24,10 +24,7 @@ import ApprovalPackPresenterView from './ApprovalPackPresenterView';
 import {
   getNsnMpnDescriptionColumns,
   getPlatformVariantColumn,
-  getRequiredColumn,
-  getAvailableColumn,
-  getAvailableColumnLinkRenderer,
-  getToBringColumn,
+  getRequiredToBringInWarehouseColumns,
   getSummaryShortfallDeltaColumn,
   getSummaryDeviationDeltaColumn,
   DETACHMENT_TABLE_LAYOUT,
@@ -43,6 +40,7 @@ interface ApprovalPackTabProps {
   viewOnly: boolean;
   onEditLine: (line: PlanLine) => void;
   onViewInventory: (line: PlanLine) => void;
+  onViewNsn: (line: PlanLine) => void;
   onApproveLines: (lineIds: string[], approval: OfflineApprovalRecord) => void;
   onSaved?: () => void;
 }
@@ -58,6 +56,7 @@ export default function ApprovalPackTab({
   viewOnly,
   onEditLine,
   onViewInventory,
+  onViewNsn,
   onApproveLines,
   onSaved,
 }: ApprovalPackTabProps) {
@@ -179,11 +178,9 @@ export default function ApprovalPackTab({
   };
 
   const shortfallColumns = [
-    ...getNsnMpnDescriptionColumns<PlanLine>(),
+    ...getNsnMpnDescriptionColumns<PlanLine>(onViewNsn),
     getPlatformVariantColumn<PlanLine>(platform, variant),
-    getRequiredColumn<PlanLine>(),
-    getAvailableColumn<PlanLine>(getAvailableColumnLinkRenderer(onViewInventory)),
-    getToBringColumn<PlanLine>(),
+    ...getRequiredToBringInWarehouseColumns<PlanLine>(onViewInventory, { lines: shortfalls }),
     getSummaryShortfallDeltaColumn<PlanLine>(),
     {
       title: 'Resolution',
@@ -196,11 +193,9 @@ export default function ApprovalPackTab({
   ];
 
   const deviationColumns = [
-    ...getNsnMpnDescriptionColumns<PlanLine>(),
+    ...getNsnMpnDescriptionColumns<PlanLine>(onViewNsn),
     getPlatformVariantColumn<PlanLine>(platform, variant),
-    getRequiredColumn<PlanLine>(),
-    getAvailableColumn<PlanLine>(getAvailableColumnLinkRenderer(onViewInventory)),
-    getToBringColumn<PlanLine>(),
+    ...getRequiredToBringInWarehouseColumns<PlanLine>(onViewInventory, { lines: deviations }),
     getSummaryDeviationDeltaColumn<PlanLine>(80),
     {
       title: 'Reason / Remarks',

@@ -1,5 +1,6 @@
 import { buildInterchangeableDemoLine } from './interchangeableLines';
 import { createAddedPlanLine } from './addedPlanLines';
+import { mockMrpController } from './mrpController';
 import { NSN_CATALOG } from '../data/nsnCatalog';
 import type { Platform, PlatformPlan } from '../types/detachment';
 import type { LSeriesRecord } from '../types/lSeries';
@@ -233,6 +234,7 @@ export function buildPlanLinesFromTemplate(
       trade,
       system,
       remarks: '',
+      mrpController: mockMrpController(plan.platform, nsn),
     };
   });
 }
@@ -293,6 +295,7 @@ function applyFalconDeviationDemo(planId: string, lines: PlanLine[]): PlanLine[]
       catalogEntry,
       0,
       'Deployable secure radio requested per exercise comms plan',
+      'F-16',
     ),
     id: `${planId}-demo-deviation-added-1`,
   };

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { App, Button, Space, Tabs, Tag, Typography } from 'antd';
-import { EditOutlined, FileTextOutlined } from '@ant-design/icons';
+import { CopyOutlined, EditOutlined, FileTextOutlined } from '@ant-design/icons';
 import { useApp } from '../../context/AppContext';
 import type { Detachment, PlatformPlan } from '../../types/detachment';
 import { formatDateRange } from '../../utils/planUtils';
@@ -14,6 +14,7 @@ import {
   applyOfflineApprovalToLines,
   countApprovalPackLines,
   countApprovedPackLines,
+  countAwaitingSparesLines,
   countWorkQueueLines,
 } from '../../types/planLine';
 import type { OfflineApprovalRecord, PlanLine } from '../../types/planLine';
@@ -23,15 +24,18 @@ import { createAddedPlanLines } from '../../utils/addedPlanLines';
 import { showAddedNsnToast, showPlanLineSaveToast } from '../../utils/planLineToasts';
 import KpiStrip from './KpiStrip';
 import WorkQueueTab from './WorkQueueTab';
+import AwaitingSparesTab from './AwaitingSparesTab';
 import ApprovalPackTab from './ApprovalPackTab';
 import ApprovedTab from './ApprovedTab';
 import LSeriesTable from './LSeriesTable';
 import AddNsnDrawer from './AddNsnDrawer';
 import InventoryDrawer from './InventoryDrawer';
+import SparesDetailPlaceholderModal from './SparesDetailPlaceholderModal';
 import EditLineDrawer from './EditLineDrawer';
 import EditPolLineDrawer from './EditPolLineDrawer';
 import EditParametersModal from './EditParametersModal';
 import RemarksModal from './RemarksModal';
+import DuplicatePlanModal from '../plans/DuplicatePlanModal';
 
 const STATUS_COLORS: Record<string, string> = {
   Draft: 'default',
@@ -39,7 +43,12 @@ const STATUS_COLORS: Record<string, string> = {
   Approved: 'success',
 };
 
-type PlanTabKey = 'work-queue' | 'all-components' | 'approval-pack' | 'approved';
+type PlanTabKey =
+  | 'work-queue'
+  | 'awaiting-spares'
+  | 'all-components'
+  | 'approval-pack'
+  | 'approved';
 
 interface PlanDetailsContentProps {
   plan: PlatformPlan;
@@ -59,14 +68,17 @@ export default function PlanDetailsContent({
 
   const [activeTab, setActiveTab] = useState<PlanTabKey>('work-queue');
   const [inventoryLine, setInventoryLine] = useState<PlanLine | null>(null);
+  const [sparesDetailLine, setSparesDetailLine] = useState<PlanLine | null>(null);
   const [editLine, setEditLine] = useState<PlanLine | null>(null);
   const [remarksOpen, setRemarksOpen] = useState(false);
   const [editParamsOpen, setEditParamsOpen] = useState(false);
+  const [duplicateOpen, setDuplicateOpen] = useState(false);
   const [addNsnOpen, setAddNsnOpen] = useState(false);
 
   const existingNsns = useMemo(() => lines.map((line) => line.nsn), [lines]);
   const variantLabel = formatVariantLabels(plan);
   const workQueueCount = countWorkQueueLines(lines);
+  const awaitingSparesCount = countAwaitingSparesLines(lines);
   const approvalPackCount = countApprovalPackLines(lines);
   const approvedCount = countApprovedPackLines(lines);
 
@@ -90,7 +102,7 @@ export default function PlanDetailsContent({
   };
 
   const handleAddNsns = (entries: NsnCatalogEntry[], deviationReason: string) => {
-    const newLines = createAddedPlanLines(planId, entries, deviationReason).reverse();
+    const newLines = createAddedPlanLines(planId, entries, deviationReason, plan.platform).reverse();
     updatePlanLines(planId, [...newLines, ...lines]);
     showAddedNsnToast(message);
     setActiveTab('work-queue');
@@ -120,6 +132,22 @@ export default function PlanDetailsContent({
           viewOnly={viewOnly}
           onEditLine={openEditLine}
           onViewInventory={setInventoryLine}
+          onViewNsn={setSparesDetailLine}
+        />
+      ),
+    },
+    {
+      key: 'awaiting-spares',
+      label: `Awaiting spares${awaitingSparesCount > 0 ? ` (${awaitingSparesCount})` : ''}`,
+      children: (
+        <AwaitingSparesTab
+          lines={lines}
+          platform={plan.platform}
+          variant={variantLabel}
+          viewOnly={viewOnly}
+          onEditLine={openEditLine}
+          onViewInventory={setInventoryLine}
+          onViewNsn={setSparesDetailLine}
         />
       ),
     },
@@ -134,6 +162,7 @@ export default function PlanDetailsContent({
           viewOnly={viewOnly}
           onEditLine={openEditLine}
           onViewInventory={setInventoryLine}
+          onViewNsn={setSparesDetailLine}
           onAddNsn={() => setAddNsnOpen(true)}
           onDeleteLine={handleDeleteLine}
         />
@@ -150,6 +179,7 @@ export default function PlanDetailsContent({
           viewOnly={viewOnly}
           onEditLine={openEditLine}
           onViewInventory={setInventoryLine}
+          onViewNsn={setSparesDetailLine}
           onApproveLines={handleApproveLines}
           onSaved={() => setActiveTab('approved')}
         />
@@ -166,6 +196,7 @@ export default function PlanDetailsContent({
           viewOnly={viewOnly}
           onEditLine={openEditLine}
           onViewInventory={setInventoryLine}
+          onViewNsn={setSparesDetailLine}
         />
       ),
     },
@@ -211,6 +242,9 @@ export default function PlanDetailsContent({
                 <Button icon={<EditOutlined />} onClick={() => setEditParamsOpen(true)}>
                   Edit parameters
                 </Button>
+                <Button icon={<CopyOutlined />} onClick={() => setDuplicateOpen(true)}>
+                  Duplicate plan
+                </Button>
                 <Button icon={<FileTextOutlined />} onClick={() => setRemarksOpen(true)}>
                   Plan remarks
                 </Button>
@@ -240,6 +274,12 @@ export default function PlanDetailsContent({
         open={!!inventoryLine}
         sparesRequiredBy={detachment.detachmentDateStart}
         onClose={() => setInventoryLine(null)}
+      />
+
+      <SparesDetailPlaceholderModal
+        line={sparesDetailLine}
+        open={!!sparesDetailLine}
+        onClose={() => setSparesDetailLine(null)}
       />
 
       {editLine && isPolLine(editLine) ? (
@@ -280,6 +320,13 @@ export default function PlanDetailsContent({
         remarks={plan.remarks ?? ''}
         viewOnly={viewOnly}
         onSave={(remarks) => updatePlan(planId, { remarks })}
+      />
+
+      <DuplicatePlanModal
+        open={duplicateOpen}
+        onClose={() => setDuplicateOpen(false)}
+        plan={plan}
+        detachment={detachment}
       />
     </div>
   );

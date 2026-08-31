@@ -4,7 +4,7 @@ import dayjs from 'dayjs';
 import { getMpnForNsn } from '../../data/lSeriesTemplate';
 import type { Platform } from '../../types/detachment';
 import type { ComponentCategory, PlanLine } from '../../types/planLine';
-import { getDeviationDelta, getShortfallDelta } from '../../types/planLine';
+import { getDeviationDelta, getGroupAvailableQty, getShortfallDelta } from '../../types/planLine';
 import { formatDate } from '../../utils/planUtils';
 import MpnCell from '../lseries/MpnCell';
 
@@ -32,6 +32,13 @@ export const VARIANT_COLUMN_WIDTH = 110;
 export const COMPONENT_PLATFORM_VARIANT_WIDTH =
   PLATFORM_COLUMN_WIDTH + VARIANT_COLUMN_WIDTH;
 export const QTY_COLUMN_WIDTH = 88;
+export const REQUIRED_HUG_COLUMN_WIDTH = 88;
+export const TO_BRING_HUG_COLUMN_WIDTH = 92;
+export const WAREHOUSE_HUG_COLUMN_WIDTH = 96;
+export const QTY_HUG_COLUMNS_SCROLL_WIDTH =
+  REQUIRED_HUG_COLUMN_WIDTH + TO_BRING_HUG_COLUMN_WIDTH + WAREHOUSE_HUG_COLUMN_WIDTH;
+export const REQUIRED_TO_BRING_HUG_SCROLL_WIDTH =
+  REQUIRED_HUG_COLUMN_WIDTH + TO_BRING_HUG_COLUMN_WIDTH;
 export const UOM_COLUMN_WIDTH = 70;
 export const REMARKS_COLUMN_WIDTH = 160;
 export const APPROVED_BY_COLUMN_WIDTH = 140;
@@ -39,8 +46,9 @@ export const APPROVED_ON_COLUMN_WIDTH = 130;
 export const POL_FULFILLED_COLUMN_WIDTH = 88;
 export const TRADE_COLUMN_WIDTH = 90;
 export const SYSTEM_COLUMN_WIDTH = 120;
+export const MRP_CONTROLLER_COLUMN_WIDTH = 120;
 
-/** 7th column width shared by shortfall (Delta) and deviation (To-bring) summary tables. */
+/** 7th column width shared by shortfall and deviation summary tables. */
 export const SUMMARY_SEVENTH_COLUMN_WIDTH = 100;
 
 export const ACTION_COLUMN_WIDTH = 160;
@@ -97,6 +105,15 @@ export function getSystemColumn<T extends { system?: string }>(): ColumnType<T> 
     key: 'system',
     width: SYSTEM_COLUMN_WIDTH,
     render: (_: unknown, record: T) => record.system?.trim() || '—',
+  };
+}
+
+export function getMrpControllerColumn<T extends { mrpController?: string }>(): ColumnType<T> {
+  return {
+    title: 'MRP controller',
+    key: 'mrpController',
+    width: MRP_CONTROLLER_COLUMN_WIDTH,
+    render: (_: unknown, record: T) => record.mrpController?.trim() || '—',
   };
 }
 
@@ -203,13 +220,36 @@ export function getComponentPlatformVariantColumns<T extends PlanLine>(
   ];
 }
 
-export function getNsnMpnDescriptionColumns<T extends NsnRow>(): ColumnType<T>[] {
+export function getNsnColumnLinkRenderer(
+  onViewNsn: (line: PlanLine) => void,
+): NonNullable<ColumnType<PlanLine>['render']> {
+  return (value: string, record: PlanLine) => (
+    <Button
+      type="link"
+      size="small"
+      className="nsn-link"
+      style={{ padding: 0 }}
+      onClick={() => onViewNsn(record)}
+    >
+      {value}
+    </Button>
+  );
+}
+
+export function getNsnMpnDescriptionColumns<T extends NsnRow>(
+  onViewNsn?: (line: PlanLine) => void,
+): ColumnType<T>[] {
+  const nsnRender = onViewNsn
+    ? (getNsnColumnLinkRenderer(onViewNsn) as unknown as ColumnType<T>['render'])
+    : undefined;
+
   return [
     {
       title: 'NSN',
       dataIndex: 'nsn',
       width: NSN_COLUMN_WIDTH,
       ellipsis: true,
+      render: nsnRender,
     },
     getMpnColumn<T>(),
     {
@@ -221,8 +261,39 @@ export function getNsnMpnDescriptionColumns<T extends NsnRow>(): ColumnType<T>[]
   ];
 }
 
-export function getRequiredColumn<T extends PlanLine>(): ColumnType<T> {
-  return { title: 'Required', dataIndex: 'requiredQty', width: QTY_COLUMN_WIDTH };
+export function getNumericQtySortFilter<T>(
+  getValue: (record: T) => number,
+  rows: T[] = [],
+): Pick<ColumnType<T>, 'sorter' | 'filters' | 'onFilter'> {
+  const filters = [...new Set(rows.map(getValue))]
+    .sort((a, b) => a - b)
+    .map((value) => ({ text: String(value), value }));
+
+  return {
+    sorter: (a, b) => getValue(a) - getValue(b),
+    filters,
+    onFilter: (value, record) => getValue(record) === value,
+  };
+}
+
+export function withTableHugColumn<T>(column: ColumnType<T>, width: number): ColumnType<T> {
+  return {
+    ...column,
+    width,
+    onHeaderCell: () => ({ className: 'table-hug-col' }),
+    onCell: () => ({ className: 'table-hug-col' }),
+  };
+}
+
+export function getRequiredColumn<T extends PlanLine>(lines: PlanLine[] = []): ColumnType<T> {
+  return withTableHugColumn(
+    {
+      title: 'Required',
+      dataIndex: 'requiredQty',
+      ...getNumericQtySortFilter<T>((record) => record.requiredQty, lines as T[]),
+    },
+    REQUIRED_HUG_COLUMN_WIDTH,
+  );
 }
 
 export function getAvailableColumnLinkRenderer(
@@ -243,19 +314,44 @@ export function getAvailableColumnLinkRenderer(
 
 export function getAvailableColumn<T extends PlanLine>(
   render?: ColumnType<T>['render'],
+  options: { lines?: PlanLine[] } = {},
 ): ColumnType<T> {
-  return {
-    title: 'Available',
-    dataIndex: 'availableQty',
-    width: QTY_COLUMN_WIDTH,
-    render,
-  };
+  const lines = options.lines ?? [];
+  return withTableHugColumn(
+    {
+      title: 'Warehouse',
+      dataIndex: 'availableQty',
+      render,
+      ...getNumericQtySortFilter<T>((record) => getGroupAvailableQty(record), lines as T[]),
+    },
+    WAREHOUSE_HUG_COLUMN_WIDTH,
+  );
 }
 
-export function getToBringColumn<T extends PlanLine>(
-  width: number = QTY_COLUMN_WIDTH,
-): ColumnType<T> {
-  return { title: 'To-bring', dataIndex: 'toBringQty', width };
+export function getToBringColumn<T extends PlanLine>(lines: PlanLine[] = []): ColumnType<T> {
+  return withTableHugColumn(
+    {
+      title: 'To-bring',
+      dataIndex: 'toBringQty',
+      ...getNumericQtySortFilter<T>((record) => record.toBringQty, lines as T[]),
+    },
+    TO_BRING_HUG_COLUMN_WIDTH,
+  );
+}
+
+export function getRequiredToBringInWarehouseColumns<T extends PlanLine>(
+  onViewInventory?: (line: PlanLine) => void,
+  options: { lines?: PlanLine[] } = {},
+): ColumnType<T>[] {
+  const lines = options.lines ?? [];
+  const inventoryRender = onViewInventory
+    ? (getAvailableColumnLinkRenderer(onViewInventory) as ColumnType<T>['render'])
+    : undefined;
+  return [
+    getRequiredColumn<T>(lines),
+    getToBringColumn<T>(lines),
+    getAvailableColumn<T>(inventoryRender, { lines }),
+  ];
 }
 
 export function getUomColumn<T extends { uom?: string }>(): ColumnType<T> {
@@ -419,8 +515,8 @@ export function getPolReferenceColumns<T extends PlanLine>(
       ellipsis: true,
     },
     ...getComponentPlatformVariantColumns<T>(platform, variant, tableOptions),
-    getRequiredColumn<T>(),
-    getToBringColumn<T>(),
+    getRequiredColumn<T>(lines),
+    getToBringColumn<T>(lines),
   ];
 
   if (showUom) {
@@ -440,15 +536,19 @@ export function getOperationalComponentColumns(
   platform: Platform,
   variant: string,
   onViewInventory: (line: PlanLine) => void,
-  columnVisibility: Partial<Record<'trade' | 'system' | 'remarks', boolean>> = {},
+  columnVisibility: Partial<Record<'trade' | 'system' | 'mrpController' | 'remarks', boolean>> = {},
   tableOptions: ComponentTableColumnOptions = {},
+  onViewNsn?: (line: PlanLine) => void,
 ): ColumnType<PlanLine>[] {
   const showTrade = category === 'LRU' && columnVisibility.trade === true;
   const showSystem = category === 'LRU' && columnVisibility.system === true;
+  const showMrpController = columnVisibility.mrpController === true;
   const showRemarks = columnVisibility.remarks !== false;
   const lines = tableOptions.lines ?? [];
 
-  const columns: ColumnType<PlanLine>[] = [...getNsnMpnDescriptionColumns<PlanLine>()];
+  const columns: ColumnType<PlanLine>[] = [
+    ...getNsnMpnDescriptionColumns<PlanLine>(onViewNsn),
+  ];
 
   if (showTrade) {
     columns.push(getTradeColumn<PlanLine>());
@@ -456,12 +556,13 @@ export function getOperationalComponentColumns(
   if (showSystem) {
     columns.push(getSystemColumn<PlanLine>());
   }
+  if (showMrpController) {
+    columns.push(getMrpControllerColumn<PlanLine>());
+  }
 
   columns.push(
     ...getComponentPlatformVariantColumns<PlanLine>(platform, variant, tableOptions),
-    getRequiredColumn<PlanLine>(),
-    getAvailableColumn<PlanLine>(getAvailableColumnLinkRenderer(onViewInventory)),
-    getToBringColumn<PlanLine>(),
+    ...getRequiredToBringInWarehouseColumns<PlanLine>(onViewInventory, { lines }),
   );
 
   if (showRemarks) {
@@ -475,13 +576,13 @@ export function getOperationalComponentColumns(
 
 export function computeOperationalTableScrollX(
   category: Extract<ComponentCategory, 'LRU' | 'Consumable'>,
-  columnVisibility: Partial<Record<'trade' | 'system' | 'remarks', boolean>> = {},
+  columnVisibility: Partial<Record<'trade' | 'system' | 'mrpController' | 'remarks', boolean>> = {},
 ): number {
   const extraWidths = [
     COMPONENT_PLATFORM_VARIANT_WIDTH,
-    QTY_COLUMN_WIDTH,
-    QTY_COLUMN_WIDTH,
-    QTY_COLUMN_WIDTH,
+    REQUIRED_HUG_COLUMN_WIDTH,
+    TO_BRING_HUG_COLUMN_WIDTH,
+    WAREHOUSE_HUG_COLUMN_WIDTH,
     APPROVED_BY_COLUMN_WIDTH,
     APPROVED_ON_COLUMN_WIDTH,
     STATUS_COLUMN_WIDTH,
@@ -493,6 +594,9 @@ export function computeOperationalTableScrollX(
   }
   if (category === 'LRU' && columnVisibility.system === true) {
     extraWidths.unshift(SYSTEM_COLUMN_WIDTH);
+  }
+  if (columnVisibility.mrpController === true) {
+    extraWidths.unshift(MRP_CONTROLLER_COLUMN_WIDTH);
   }
   if (columnVisibility.remarks !== false) {
     extraWidths.splice(-2, 0, REMARKS_COLUMN_WIDTH);
@@ -508,8 +612,8 @@ export function computePolTableScrollX(
   const { includeStatus = false, includeAction = false } = options;
   const extraWidths = [
     COMPONENT_PLATFORM_VARIANT_WIDTH,
-    QTY_COLUMN_WIDTH,
-    QTY_COLUMN_WIDTH,
+    REQUIRED_HUG_COLUMN_WIDTH,
+    TO_BRING_HUG_COLUMN_WIDTH,
   ];
 
   if (columnVisibility.uom !== false) {
@@ -529,13 +633,13 @@ export function computePolTableScrollX(
   return computeDetachmentTableScrollX(extraWidths);
 }
 
-export function getSummaryToBringColumn<T extends PlanLine>(): ColumnType<T> {
-  return getToBringColumn(SUMMARY_SEVENTH_COLUMN_WIDTH);
+export function getSummaryToBringColumn<T extends PlanLine>(lines: PlanLine[] = []): ColumnType<T> {
+  return getToBringColumn<T>(lines);
 }
 
 export function getSummaryShortfallDeltaColumn<T extends PlanLine>(): ColumnType<T> {
   return {
-    title: 'Delta',
+    title: 'Shortfall',
     key: 'delta',
     width: SUMMARY_SEVENTH_COLUMN_WIDTH,
     onCell: () => ({ className: 'shortfall-delta-cell' }),
@@ -547,7 +651,7 @@ export function getSummaryDeviationDeltaColumn<T extends PlanLine>(
   width: number = SUMMARY_SEVENTH_COLUMN_WIDTH,
 ): ColumnType<T> {
   return {
-    title: 'Delta',
+    title: 'Deviation',
     key: 'delta',
     width,
     onCell: () => ({ className: 'deviation-delta-cell' }),
@@ -586,14 +690,14 @@ export function computeDetachmentTableScrollX(extraColumnWidths: number[]): numb
   return NSN_MPN_DESCRIPTION_WIDTH + extraColumnWidths.reduce((sum, width) => sum + width, 0);
 }
 
-/** LRU tab: Trade, System, Platform, Variant, Required, Available, To-bring, Remarks, Approved by, Approved on, Status, Action */
+/** LRU tab: Trade, System, Platform, Variant, Required, To-bring, Warehouse, Remarks, Approved by, Approved on, Status, Action */
 export const LRU_OPERATIONAL_TABLE_SCROLL_X = computeDetachmentTableScrollX([
   TRADE_COLUMN_WIDTH,
   SYSTEM_COLUMN_WIDTH,
   COMPONENT_PLATFORM_VARIANT_WIDTH,
-  QTY_COLUMN_WIDTH,
-  QTY_COLUMN_WIDTH,
-  QTY_COLUMN_WIDTH,
+  REQUIRED_HUG_COLUMN_WIDTH,
+  TO_BRING_HUG_COLUMN_WIDTH,
+  WAREHOUSE_HUG_COLUMN_WIDTH,
   REMARKS_COLUMN_WIDTH,
   APPROVED_BY_COLUMN_WIDTH,
   APPROVED_ON_COLUMN_WIDTH,
@@ -601,12 +705,12 @@ export const LRU_OPERATIONAL_TABLE_SCROLL_X = computeDetachmentTableScrollX([
   ACTION_COLUMN_WIDTH,
 ]);
 
-/** Consumable tab: Platform, Variant, Required, Available, To-bring, Remarks, Approved by, Approved on, Status, Action */
+/** Consumable tab: Platform, Variant, Required, To-bring, Warehouse, Remarks, Approved by, Approved on, Status, Action */
 export const CONSUMABLE_OPERATIONAL_TABLE_SCROLL_X = computeDetachmentTableScrollX([
   COMPONENT_PLATFORM_VARIANT_WIDTH,
-  QTY_COLUMN_WIDTH,
-  QTY_COLUMN_WIDTH,
-  QTY_COLUMN_WIDTH,
+  REQUIRED_HUG_COLUMN_WIDTH,
+  TO_BRING_HUG_COLUMN_WIDTH,
+  WAREHOUSE_HUG_COLUMN_WIDTH,
   REMARKS_COLUMN_WIDTH,
   APPROVED_BY_COLUMN_WIDTH,
   APPROVED_ON_COLUMN_WIDTH,
@@ -620,39 +724,68 @@ export const DETACHMENT_TABLE_SCROLL_X = LRU_OPERATIONAL_TABLE_SCROLL_X;
 /** POL reference table: Platform, Variant, Required, To-bring, UOM, Remarks, Fulfilled */
 export const POL_REFERENCE_TABLE_SCROLL_X = computeDetachmentTableScrollX([
   COMPONENT_PLATFORM_VARIANT_WIDTH,
-  QTY_COLUMN_WIDTH,
-  QTY_COLUMN_WIDTH,
+  REQUIRED_HUG_COLUMN_WIDTH,
+  TO_BRING_HUG_COLUMN_WIDTH,
   UOM_COLUMN_WIDTH,
   REMARKS_COLUMN_WIDTH,
   POL_FULFILLED_COLUMN_WIDTH,
 ]);
 
-/** Work queue: Platform/Variant, Required, Available, Delta, Edit */
-export const WORK_QUEUE_SCROLL_X = computeDetachmentTableScrollX([
-  PLATFORM_VARIANT_COLUMN_WIDTH,
-  QTY_COLUMN_WIDTH,
-  QTY_COLUMN_WIDTH,
-  SUMMARY_SEVENTH_COLUMN_WIDTH,
-  SUMMARY_EDIT_COLUMN_WIDTH,
-]);
+export function computeWorkQueueTableScrollX(
+  columnVisibility: Partial<Record<'mrpController', boolean>> = {},
+): number {
+  const extraWidths = [
+    PLATFORM_VARIANT_COLUMN_WIDTH,
+    REQUIRED_HUG_COLUMN_WIDTH,
+    TO_BRING_HUG_COLUMN_WIDTH,
+    WAREHOUSE_HUG_COLUMN_WIDTH,
+    SUMMARY_SEVENTH_COLUMN_WIDTH,
+    SUMMARY_EDIT_COLUMN_WIDTH,
+  ];
 
-/** Approval pack shortfall: Platform/Variant, Required, Available, To-bring, Delta, Resolution, Edit */
+  if (columnVisibility.mrpController === true) {
+    extraWidths.unshift(MRP_CONTROLLER_COLUMN_WIDTH);
+  }
+
+  return computeDetachmentTableScrollX(extraWidths);
+}
+
+export function computeAwaitingSparesTableScrollX(
+  columnVisibility: Partial<Record<'mrpController', boolean>> = {},
+): number {
+  const extraWidths = [
+    PLATFORM_VARIANT_COLUMN_WIDTH,
+    REQUIRED_HUG_COLUMN_WIDTH,
+    TO_BRING_HUG_COLUMN_WIDTH,
+    WAREHOUSE_HUG_COLUMN_WIDTH,
+    FLEX_TEXT_COLUMN_MIN_WIDTH,
+    SUMMARY_EDIT_COLUMN_WIDTH,
+  ];
+
+  if (columnVisibility.mrpController === true) {
+    extraWidths.unshift(MRP_CONTROLLER_COLUMN_WIDTH);
+  }
+
+  return computeDetachmentTableScrollX(extraWidths);
+}
+
+/** Approval pack shortfall: Platform/Variant, Required, To-bring, Warehouse, Shortfall, Resolution, Edit */
 export const APPROVAL_PACK_SHORTFALL_SCROLL_X = computeDetachmentTableScrollX([
   PLATFORM_VARIANT_COLUMN_WIDTH,
-  QTY_COLUMN_WIDTH,
-  QTY_COLUMN_WIDTH,
-  QTY_COLUMN_WIDTH,
+  REQUIRED_HUG_COLUMN_WIDTH,
+  TO_BRING_HUG_COLUMN_WIDTH,
+  WAREHOUSE_HUG_COLUMN_WIDTH,
   SUMMARY_SEVENTH_COLUMN_WIDTH,
   FLEX_TEXT_COLUMN_MIN_WIDTH,
   SUMMARY_EDIT_COLUMN_WIDTH,
 ]);
 
-/** Approval pack deviation: Platform/Variant, Required, Available, To-bring, Delta, Reason, Edit */
+/** Approval pack deviation: Platform/Variant, Required, To-bring, Warehouse, Deviation, Reason, Edit */
 export const APPROVAL_PACK_DEVIATION_SCROLL_X = computeDetachmentTableScrollX([
   PLATFORM_VARIANT_COLUMN_WIDTH,
-  QTY_COLUMN_WIDTH,
-  QTY_COLUMN_WIDTH,
-  QTY_COLUMN_WIDTH,
+  REQUIRED_HUG_COLUMN_WIDTH,
+  TO_BRING_HUG_COLUMN_WIDTH,
+  WAREHOUSE_HUG_COLUMN_WIDTH,
   80,
   FLEX_TEXT_COLUMN_MIN_WIDTH,
   SUMMARY_EDIT_COLUMN_WIDTH,

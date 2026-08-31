@@ -1067,6 +1067,13 @@ body {
   font-weight: 600;
 }
 
+.detachment-table-container .table-hug-col,
+.inventory-drawer-table .table-hug-col,
+.kpi-insight-modal .table-hug-col {
+  width: 1%;
+  white-space: nowrap;
+}
+
 .available-qty-link,
 .nsn-link {
   text-decoration: underline !important;

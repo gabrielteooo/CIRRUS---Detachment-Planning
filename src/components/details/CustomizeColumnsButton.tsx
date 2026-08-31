@@ -2,9 +2,10 @@ import { Button, Checkbox, Popover, Typography } from 'antd';
 import { TableOutlined } from '@ant-design/icons';
 import type { ComponentCategory } from '../../types/planLine';
 
-export type LruOptionalColumnKey = 'trade' | 'system' | 'remarks';
-export type ConsumableOptionalColumnKey = 'remarks';
+export type LruOptionalColumnKey = 'trade' | 'system' | 'mrpController' | 'remarks';
+export type ConsumableOptionalColumnKey = 'mrpController' | 'remarks';
 export type PolOptionalColumnKey = 'remarks' | 'uom';
+export type WorkQueueOptionalColumnKey = 'mrpController';
 
 export type ComponentColumnVisibility = {
   LRU: Record<LruOptionalColumnKey, boolean>;
@@ -12,19 +13,27 @@ export type ComponentColumnVisibility = {
   POL: Record<PolOptionalColumnKey, boolean>;
 };
 
+export type WorkQueueColumnVisibility = Record<WorkQueueOptionalColumnKey, boolean>;
+
 export const DEFAULT_COMPONENT_COLUMN_VISIBILITY: ComponentColumnVisibility = {
   LRU: {
     trade: false,
     system: false,
+    mrpController: false,
     remarks: true,
   },
   Consumable: {
+    mrpController: false,
     remarks: true,
   },
   POL: {
     remarks: true,
     uom: true,
   },
+};
+
+export const DEFAULT_WORK_QUEUE_COLUMN_VISIBILITY: WorkQueueColumnVisibility = {
+  mrpController: false,
 };
 
 const COLUMN_OPTIONS: Record<
@@ -34,27 +43,37 @@ const COLUMN_OPTIONS: Record<
   LRU: [
     { key: 'trade', label: 'Trade' },
     { key: 'system', label: 'System' },
+    { key: 'mrpController', label: 'MRP controller' },
     { key: 'remarks', label: 'Remarks' },
   ],
-  Consumable: [{ key: 'remarks', label: 'Remarks' }],
+  Consumable: [
+    { key: 'mrpController', label: 'MRP controller' },
+    { key: 'remarks', label: 'Remarks' },
+  ],
   POL: [
     { key: 'remarks', label: 'Remarks' },
     { key: 'uom', label: 'UOM' },
   ],
 };
 
+export const WORK_QUEUE_COLUMN_OPTIONS: { key: string; label: string }[] = [
+  { key: 'mrpController', label: 'MRP controller' },
+];
+
 interface CustomizeColumnsButtonProps {
-  category: ComponentCategory;
+  category?: ComponentCategory;
+  options?: { key: string; label: string }[];
   visibility: Record<string, boolean>;
   onToggle: (key: string, visible: boolean) => void;
 }
 
 export default function CustomizeColumnsButton({
   category,
+  options,
   visibility,
   onToggle,
 }: CustomizeColumnsButtonProps) {
-  const options = COLUMN_OPTIONS[category];
+  const columnOptions = options ?? (category ? COLUMN_OPTIONS[category] : []);
 
   const content = (
     <div className="customize-columns-popover">
@@ -62,7 +81,7 @@ export default function CustomizeColumnsButton({
         Customise columns
       </Typography.Text>
       <div className="customize-columns-popover-list">
-        {options.map((option) => (
+        {columnOptions.map((option) => (
           <Checkbox
             key={option.key}
             checked={visibility[option.key] ?? false}
