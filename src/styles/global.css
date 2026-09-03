@@ -544,6 +544,15 @@ body {
   color: #d48806;
 }
 
+.approval-pack-metric--deviation-delta-down {
+  background: #fafafa;
+  border-color: #f0f0f0;
+}
+
+.approval-pack-metric--deviation-delta-down .approval-pack-metric-value {
+  color: rgba(0, 0, 0, 0.45);
+}
+
 .approval-pack-presenter-deviation-delta-note {
   display: block;
   margin-bottom: 4px;
@@ -730,7 +739,8 @@ body {
 }
 
 .row-approved > td.shortfall-delta-cell,
-.row-approved > td.deviation-delta-cell {
+.row-approved > td.deviation-delta-cell,
+.row-approved > td.deviation-delta-cell--down {
   background: transparent !important;
   color: rgba(0, 0, 0, 0.45) !important;
   font-weight: 400;
@@ -1064,6 +1074,12 @@ body {
 .detachment-table-container .deviation-delta-cell {
   background-color: #fffbe6 !important;
   color: #d48806 !important;
+  font-weight: 600;
+}
+
+.detachment-table-container .deviation-delta-cell--down {
+  background-color: #fafafa !important;
+  color: rgba(0, 0, 0, 0.45) !important;
   font-weight: 600;
 }
 

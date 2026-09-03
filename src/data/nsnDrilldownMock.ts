@@ -1,5 +1,6 @@
 import dayjs from 'dayjs';
-import type { PlanLine } from '../types/planLine';
+import type { InventoryItem, PlanLine } from '../types/planLine';
+import { isPolLine } from '../types/planLine';
 import { formatDate } from '../utils/planUtils';
 
 export interface StorageLocationRow {
@@ -62,7 +63,11 @@ const STOCK_STATUS_BY_INVENTORY: Record<string, string> = {
 };
 
 function padSerial(index: number): string {
-  return `T${String(index).padStart(8, '0')}`;
+  return `T${String(index).padStart(7, '0')}`;
+}
+
+function padBatch(index: number): string {
+  return `B${String(index).padStart(7, '0')}`;
 }
 
 function padEquipment(index: number): string {
@@ -73,6 +78,136 @@ function slocFromLocation(location: string, index: number): string {
   if (location.includes('WH-A')) return 'SL01';
   if (location.includes('WH-B')) return 'SL02';
   return index % 2 === 0 ? 'SL01' : 'SL02';
+}
+
+function formatSlocDescription(location: string, index: number): string {
+  const rackMatch = location.match(/Rack\s*(\d+)/i);
+  const rack = rackMatch ? rackMatch[1].padStart(2, '0') : String(index + 1).padStart(2, '0');
+  const warehouse = location.includes('WH-B') ? 'WH02' : 'WH01';
+  return `${warehouse}-R${rack}-S`;
+}
+
+function isLruWarehouseLine(line: PlanLine): boolean {
+  return !isPolLine(line) && line.componentCategory !== 'Consumable';
+}
+
+function buildStorageRowMetrics(index: number): Pick<
+  StorageLocationRow,
+  | 'remainingUtilisationAfH'
+  | 'tsn'
+  | 'tso'
+  | 'remainingShelfLife'
+  | 'shelfLife'
+> {
+  return {
+    remainingUtilisationAfH: 20,
+    tsn: 2074 + index * 76,
+    tso: 316 - index * 14,
+    remainingShelfLife: 20,
+    shelfLife: '31 Dec 2025',
+  };
+}
+
+function buildStorageRowFromItem(
+  line: PlanLine,
+  item: InventoryItem,
+  invIndex: number,
+  rowIndex: number,
+  qty: number,
+  serialNo: string,
+  batchNo: string,
+): StorageLocationRow {
+  return {
+    id: `${line.nsn}-storage-${rowIndex}`,
+    serialNo,
+    batchNo,
+    sloc: slocFromLocation(item.location, invIndex),
+    slocDescription: formatSlocDescription(item.location, invIndex),
+    equipmentNo: padEquipment(rowIndex + 1),
+    qty,
+    stockStatus: STOCK_STATUS_BY_INVENTORY[item.status] ?? item.status,
+    ...buildStorageRowMetrics(rowIndex),
+  };
+}
+
+function buildEmptyStorageRow(line: PlanLine): StorageLocationRow {
+  return {
+    id: `${line.nsn}-storage-0`,
+    serialNo: padSerial(1),
+    batchNo: padBatch(1),
+    sloc: 'SL01',
+    slocDescription: 'WH01-R01-S',
+    equipmentNo: padEquipment(1),
+    qty: 0,
+    stockStatus: 'Warehouse',
+    ...buildStorageRowMetrics(0),
+  };
+}
+
+/** Split consumable / POL stock into batch qtys (typically ≥ 10 per batch). */
+function splitIntoBatchQtys(totalQty: number): number[] {
+  if (totalQty <= 0) return [];
+  if (totalQty < 10) return [totalQty];
+
+  if (totalQty <= 40) return [totalQty];
+
+  const firstBatch = Math.max(10, Math.floor(totalQty * 0.55));
+  const secondBatch = totalQty - firstBatch;
+
+  if (secondBatch >= 10) return [firstBatch, secondBatch];
+  return [totalQty];
+}
+
+function buildLruStorageRows(line: PlanLine): StorageLocationRow[] {
+  const rows: StorageLocationRow[] = [];
+  let serialIndex = 0;
+
+  for (let invIndex = 0; invIndex < line.inventory.length; invIndex += 1) {
+    const item = line.inventory[invIndex];
+    for (let unit = 0; unit < item.qty; unit += 1) {
+      serialIndex += 1;
+      rows.push(
+        buildStorageRowFromItem(
+          line,
+          item,
+          invIndex,
+          serialIndex,
+          1,
+          padSerial(serialIndex),
+          padBatch(serialIndex),
+        ),
+      );
+    }
+  }
+
+  return rows;
+}
+
+function buildBatchStorageRows(line: PlanLine): StorageLocationRow[] {
+  const rows: StorageLocationRow[] = [];
+  let batchIndex = 0;
+
+  for (let invIndex = 0; invIndex < line.inventory.length; invIndex += 1) {
+    const item = line.inventory[invIndex];
+    const batchQtys = splitIntoBatchQtys(item.qty);
+
+    for (const batchQty of batchQtys) {
+      batchIndex += 1;
+      rows.push(
+        buildStorageRowFromItem(
+          line,
+          item,
+          invIndex,
+          batchIndex,
+          batchQty,
+          padSerial(batchIndex),
+          padBatch(batchIndex),
+        ),
+      );
+    }
+  }
+
+  return rows;
 }
 
 /** Demo EDD mix: ~1/3 Cannibalise (both late), ~2/3 Wait (repair or new buy meets need-by). */
@@ -94,40 +229,14 @@ function supplyEddProfile(nsn: string): { repairEddIso: string; newBuyEddIso: st
 
 export function getStorageLocationRows(line: PlanLine): StorageLocationRow[] {
   if (line.inventory.length === 0) {
-    return [
-      {
-        id: `${line.nsn}-storage-0`,
-        serialNo: padSerial(1),
-        batchNo: '',
-        sloc: 'SL01',
-        slocDescription: 'XXXXX-XXX-S',
-        equipmentNo: padEquipment(1),
-        qty: 0,
-        stockStatus: 'Warehouse',
-        remainingUtilisationAfH: 20,
-        tsn: 2074,
-        tso: 316,
-        remainingShelfLife: 20,
-        shelfLife: '31 Dec 2025',
-      },
-    ];
+    return [buildEmptyStorageRow(line)];
   }
 
-  return line.inventory.map((item, index) => ({
-    id: `${line.nsn}-storage-${index}`,
-    serialNo: padSerial(index + 1),
-    batchNo: '',
-    sloc: slocFromLocation(item.location, index),
-    slocDescription: item.location || 'XXXXX-XXX-S',
-    equipmentNo: padEquipment(index + 1),
-    qty: item.qty,
-    stockStatus: STOCK_STATUS_BY_INVENTORY[item.status] ?? item.status,
-    remainingUtilisationAfH: 20,
-    tsn: 2074 + index * 76,
-    tso: 316 - index * 14,
-    remainingShelfLife: 20,
-    shelfLife: '31 Dec 2025',
-  }));
+  const rows = isLruWarehouseLine(line)
+    ? buildLruStorageRows(line)
+    : buildBatchStorageRows(line);
+
+  return rows.length > 0 ? rows : [buildEmptyStorageRow(line)];
 }
 
 export function getOnAircraftRows(line: PlanLine): OnAircraftRow[] {

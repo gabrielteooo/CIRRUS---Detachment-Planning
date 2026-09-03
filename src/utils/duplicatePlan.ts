@@ -7,6 +7,7 @@ export function clonePlanLinesForDuplicate(lines: PlanLine[], newPlanId: string)
       ...cloned,
       id: `${newPlanId}-line-${index + 1}`,
       offlineApproval: undefined,
+      approvalSnapshots: undefined,
       deviationApproved: undefined,
       shortfallActions: cloned.shortfallActions.map((action) => ({
         ...action,

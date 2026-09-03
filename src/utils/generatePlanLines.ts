@@ -1,15 +1,15 @@
 import { buildInterchangeableDemoLine } from './interchangeableLines';
-import { createAddedPlanLine } from './addedPlanLines';
 import { mockMrpController } from './mrpController';
-import { NSN_CATALOG } from '../data/nsnCatalog';
 import type { Platform, PlatformPlan } from '../types/detachment';
 import type { LSeriesRecord } from '../types/lSeries';
 import type { InventoryItem, PlanLine } from '../types/planLine';
 import {
+  ensureLegacyApprovalSnapshots,
   getDefaultToBringQty,
   getGroupAvailableQty,
   getLineStatus,
   isPolLine,
+  syncPlanLinesIssuance,
 } from '../types/planLine';
 import {
   L_SERIES_TEMPLATE,
@@ -28,7 +28,7 @@ function hashSeed(text: string): number {
 }
 
 function mockAvailableQty(required: number, nsn: string, planId: string): number {
-  if (required === 0) return 0;
+  if (required === 0) return hashSeed(`${planId}-${nsn}-wh`) % 8;
   const seed = hashSeed(`${planId}-${nsn}`) % 100;
   if (seed < 12) return Math.max(0, required - 2);
   if (seed < 22) return Math.max(0, required - 1);
@@ -37,6 +37,19 @@ function mockAvailableQty(required: number, nsn: string, planId: string): number
 }
 
 function buildInventory(
+  nsn: string,
+  description: string,
+  availableQty: number,
+  category?: ComponentCategory,
+): InventoryItem[] {
+  if (category === 'Consumable' || category === 'POL') {
+    return buildBatchStyleInventory(nsn, description, availableQty);
+  }
+
+  return buildLruStyleInventory(nsn, description, availableQty);
+}
+
+function buildLruStyleInventory(
   nsn: string,
   description: string,
   availableQty: number,
@@ -82,25 +95,88 @@ function buildInventory(
   return items;
 }
 
+/** Consumables / POL — batch qty per SLOC (typically ≥ 10). */
+function buildBatchStyleInventory(
+  nsn: string,
+  description: string,
+  availableQty: number,
+): InventoryItem[] {
+  if (availableQty <= 0) {
+    return [
+      {
+        type: 'Main',
+        nsn,
+        description,
+        location: 'WH-A / Rack 1',
+        qty: 0,
+        status: 'QIT',
+      },
+    ];
+  }
+
+  if (availableQty < 20) {
+    return [
+      {
+        type: 'Main',
+        nsn,
+        description,
+        location: 'WH-A / Rack 1',
+        qty: availableQty,
+        status: 'In WH',
+      },
+    ];
+  }
+
+  const firstBatch = Math.max(10, Math.floor(availableQty * 0.6));
+  const secondBatch = availableQty - firstBatch;
+
+  const items: InventoryItem[] = [
+    {
+      type: 'Main',
+      nsn,
+      description,
+      location: 'WH-A / Rack 1',
+      qty: firstBatch,
+      status: 'In WH',
+    },
+  ];
+
+  if (secondBatch >= 10) {
+    items.push({
+      type: 'Alt',
+      nsn: `${nsn}-ALT`,
+      description: `${description} (batch)`,
+      location: 'WH-B / Rack 2',
+      qty: secondBatch,
+      status: 'In WH',
+    });
+  } else {
+    items[0] = { ...items[0], qty: availableQty };
+  }
+
+  return items;
+}
+
 /** Ensure at least `minCount` operational lines are fulfilled with surplus available stock. */
 function ensureFulfilledExcessInventory(lines: PlanLine[], minCount = 2): PlanLine[] {
   const result = lines.map((line) => ({ ...line }));
 
-  const countExcessMet = () =>
+  const countExcessAvailable = () =>
     result.filter(
       (line) =>
         !isPolLine(line) &&
         !line.isAddedNsn &&
-        getLineStatus(line) === 'Met' &&
+        line.requiredQty > 0 &&
+        getLineStatus(line) === 'Available' &&
         getGroupAvailableQty(line) > line.requiredQty,
     ).length;
 
-  if (countExcessMet() >= minCount) return result;
+  if (countExcessAvailable() >= minCount) return result;
 
-  for (let i = 0; i < result.length && countExcessMet() < minCount; i += 1) {
+  for (let i = 0; i < result.length && countExcessAvailable() < minCount; i += 1) {
     const line = result[i];
-    if (isPolLine(line) || line.isAddedNsn) continue;
-    if (getLineStatus(line) !== 'Met') continue;
+    if (isPolLine(line) || line.isAddedNsn || line.requiredQty === 0) continue;
+    if (getLineStatus(line) !== 'Available') continue;
     if (getGroupAvailableQty(line) > line.requiredQty) continue;
 
     const availableQty = line.requiredQty + 2;
@@ -217,7 +293,7 @@ export function buildPlanLinesFromTemplate(
     const availableQty = isPol
       ? requiredQty
       : mockAvailableQty(requiredQty, nsn, plan.id);
-    const inventory = buildInventory(nsn, description, availableQty);
+    const inventory = buildInventory(nsn, description, availableQty, category);
 
     return {
       id: `${plan.id}-line-${index}`,
@@ -226,6 +302,7 @@ export function buildPlanLinesFromTemplate(
       requiredQty,
       availableQty,
       toBringQty: getDefaultToBringQty(requiredQty),
+      issuedQty: 0,
       inventory,
       shortfallActions: [],
       componentCategory: category,
@@ -256,7 +333,8 @@ function buildPolPlanLine(lineId: string, component: LSComponent): PlanLine {
     requiredQty,
     availableQty: requiredQty,
     toBringQty: getDefaultToBringQty(requiredQty),
-    inventory: buildInventory(component.nsn, component.description, requiredQty),
+    issuedQty: 0,
+    inventory: buildInventory(component.nsn, component.description, requiredQty, 'POL'),
     shortfallActions: [],
     componentCategory: 'POL',
     uom: component.uom,
@@ -284,23 +362,75 @@ function applyFalconPolDemo(planId: string, lines: PlanLine[]): PlanLine[] {
   return [...withoutPolConflicts, ...polLines];
 }
 
-/** Two default deviations for Exercise Falcon 2026 demo — one added NSN, one excess to-bring. */
-function applyFalconDeviationDemo(planId: string, lines: PlanLine[]): PlanLine[] {
-  const catalogEntry = NSN_CATALOG.find((entry) => entry.nsn === '1560-01-305');
-  if (!catalogEntry) return lines;
 
-  const addedDeviation: PlanLine = {
-    ...createAddedPlanLine(
-      planId,
-      catalogEntry,
-      0,
-      'Deployable secure radio requested per exercise comms plan',
-      'F-16',
-    ),
-    id: `${planId}-demo-deviation-added-1`,
+function buildAsRequiredDemoLine(
+  planId: string,
+  index: number,
+  entry: {
+    nsn: string;
+    mpn: string;
+    description: string;
+    category: ComponentCategory;
+    availableQty: number;
+    toBringQty: number;
+    issuedQty: number;
+    remarks?: string;
+  },
+): PlanLine {
+  const { nsn, description, availableQty, toBringQty, issuedQty, category, mpn, remarks } = entry;
+  return {
+    id: `${planId}-asreq-${index}`,
+    nsn,
+    description,
+    requiredQty: 0,
+    availableQty,
+    toBringQty,
+    issuedQty,
+    inventory: buildInventory(nsn, description, availableQty, category),
+    shortfallActions: [],
+    componentCategory: category,
+    mpn,
+    remarks: remarks ?? '',
+    mrpController: mockMrpController('F-16', nsn),
   };
+}
 
-  return [addedDeviation, ...lines];
+/** Optional L-series lines (required = 0, tagged AR) for demo. */
+function applyFalconAsRequiredDemo(planId: string, lines: PlanLine[]): PlanLine[] {
+  const asRequiredLines = [
+    buildAsRequiredDemoLine(planId, 1, {
+      nsn: '1560-01-303',
+      mpn: 'MPN-SAFE-08',
+      description: 'Arming Safety Pin Kit, Flight Line',
+      category: 'Consumable',
+      availableQty: 12,
+      toBringQty: 0,
+      issuedQty: 0,
+      remarks: 'Optional — bring if exercise arm/de-arm cycle requires',
+    }),
+    buildAsRequiredDemoLine(planId, 2, {
+      nsn: '1560-01-304',
+      mpn: 'MPN-LUBE-22',
+      description: 'Hydraulic Fluid Servicing Kit',
+      category: 'Consumable',
+      availableQty: 6,
+      toBringQty: 2,
+      issuedQty: 0,
+      remarks: 'Auto-issued — warehouse exceeds to-bring',
+    }),
+    buildAsRequiredDemoLine(planId, 3, {
+      nsn: '1560-01-306',
+      mpn: 'MPN-FUEL-09',
+      description: 'Single-Point Refueling Adapter',
+      category: 'LRU',
+      availableQty: 2,
+      toBringQty: 2,
+      issuedQty: 1,
+      remarks: 'OC approval — partial manual issue',
+    }),
+  ];
+
+  return [...lines, ...asRequiredLines];
 }
 
 /** Demo scenario overlays for Exercise Falcon 2026 (plan-001). */
@@ -308,7 +438,7 @@ export function applyDemoScenario(planId: string, lines: PlanLine[]): PlanLine[]
   if (planId !== 'plan-001') return lines;
 
   lines = applyFalconPolDemo(planId, lines);
-  lines = applyFalconDeviationDemo(planId, lines);
+  lines = applyFalconAsRequiredDemo(planId, lines);
 
   const patch = (nsn: string, updates: Partial<PlanLine>) => {
     const idx = lines.findIndex((l) => l.nsn === nsn);
@@ -317,7 +447,7 @@ export function applyDemoScenario(planId: string, lines: PlanLine[]): PlanLine[]
 
   patch('1560-01-2421', {
     availableQty: 0,
-    toBringQty: 2,
+    toBringQty: 3,
     inventory: [
       { type: 'Main', nsn: '1560-01-2421', description: 'Hydraulic Pump', location: 'WH-A / Rack 3', qty: 1, status: 'In WH' },
       { type: 'Alt', nsn: '1560-01-2421-ALT', description: 'Hydraulic Pump (alternate)', location: 'WH-B / Rack 1', qty: 0, status: 'Blocked' },
@@ -331,7 +461,7 @@ export function applyDemoScenario(planId: string, lines: PlanLine[]): PlanLine[]
 
   patch('1560-01-2311', {
     availableQty: 0,
-    toBringQty: 0,
+    toBringQty: 1,
     inventory: [
       { type: 'Main', nsn: '1560-01-2311', description: 'Engine Fuel Pump', location: 'WH-A / Rack 7', qty: 0, status: 'QI' },
     ],
@@ -355,7 +485,7 @@ export function applyDemoScenario(planId: string, lines: PlanLine[]): PlanLine[]
 
   patch('1597-36-2822', {
     availableQty: 3,
-    toBringQty: 5,
+    toBringQty: 20,
     shortfallActions: [
       { type: 'wait', qty: 2, needByDate: '2026-03-01', remarks: 'Awaiting filter element delivery from supplier', approved: true },
     ],
@@ -384,12 +514,6 @@ export function applyDemoScenario(planId: string, lines: PlanLine[]): PlanLine[]
     remarks: 'Include MSDS folder',
   });
 
-  patch('1560-01-2322', {
-    availableQty: 3,
-    toBringQty: 1,
-    inventory: buildInventory('1560-01-2322', 'Engine Oil Pump', 3),
-  });
-
   patch('1560-01-2344', {
     availableQty: 2,
     toBringQty: 2,
@@ -411,5 +535,7 @@ export function getDefaultPlanLinesForPlan(
 ): PlanLine[] {
   const lines = buildPlanLinesFromTemplate(plan, lSeriesRecords);
   const withDemo = applyDemoScenario(plan.id, lines);
-  return ensureFulfilledExcessInventory(withDemo);
+  return ensureLegacyApprovalSnapshots(
+    syncPlanLinesIssuance(ensureFulfilledExcessInventory(withDemo)),
+  );
 }

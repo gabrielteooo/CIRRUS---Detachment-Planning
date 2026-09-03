@@ -29,18 +29,21 @@ function MetricCell({
   value,
   highlight,
   deviationHighlight,
+  deviationDownHighlight,
   info,
 }: {
   label: string;
   value: number | string;
   highlight?: boolean;
   deviationHighlight?: boolean;
+  deviationDownHighlight?: boolean;
   info?: string;
 }) {
   const className = [
     'approval-pack-metric',
     highlight ? 'approval-pack-metric--delta' : '',
     deviationHighlight ? 'approval-pack-metric--deviation-delta' : '',
+    deviationDownHighlight ? 'approval-pack-metric--deviation-delta-down' : '',
   ]
     .filter(Boolean)
     .join(' ');
@@ -135,7 +138,8 @@ export default function ApprovalPackDetailPanel({
           <MetricCell
             label="Deviation"
             value={formatDeviationDeltaValue(deviationDelta)}
-            deviationHighlight
+            deviationHighlight={deviationDelta >= 0}
+            deviationDownHighlight={deviationDelta < 0}
             info="Difference between to-bring and L-series required qty"
           />
         ) : (

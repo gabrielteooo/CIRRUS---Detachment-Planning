@@ -4,7 +4,9 @@ import dayjs from 'dayjs';
 import { getMpnForNsn } from '../../data/lSeriesTemplate';
 import type { Platform } from '../../types/detachment';
 import type { ComponentCategory, PlanLine } from '../../types/planLine';
-import { getDeviationDelta, getGroupAvailableQty, getShortfallDelta } from '../../types/planLine';
+import { getDeviationDelta, getDisplayIssuedQty, getGroupAvailableQty, getShortfallDelta } from '../../types/planLine';
+import FulfillmentStatusTags from './FulfillmentStatusTags';
+import LineStatusTags from './LineStatusTags';
 import { formatDate } from '../../utils/planUtils';
 import MpnCell from '../lseries/MpnCell';
 
@@ -35,8 +37,14 @@ export const QTY_COLUMN_WIDTH = 88;
 export const REQUIRED_HUG_COLUMN_WIDTH = 88;
 export const TO_BRING_HUG_COLUMN_WIDTH = 92;
 export const WAREHOUSE_HUG_COLUMN_WIDTH = 96;
+export const ISSUED_HUG_COLUMN_WIDTH = 88;
+export const FULFILLMENT_COLUMN_WIDTH = 132;
 export const QTY_HUG_COLUMNS_SCROLL_WIDTH =
-  REQUIRED_HUG_COLUMN_WIDTH + TO_BRING_HUG_COLUMN_WIDTH + WAREHOUSE_HUG_COLUMN_WIDTH;
+  REQUIRED_HUG_COLUMN_WIDTH +
+  TO_BRING_HUG_COLUMN_WIDTH +
+  WAREHOUSE_HUG_COLUMN_WIDTH +
+  ISSUED_HUG_COLUMN_WIDTH +
+  FULFILLMENT_COLUMN_WIDTH;
 export const REQUIRED_TO_BRING_HUG_SCROLL_WIDTH =
   REQUIRED_HUG_COLUMN_WIDTH + TO_BRING_HUG_COLUMN_WIDTH;
 export const UOM_COLUMN_WIDTH = 70;
@@ -289,8 +297,9 @@ export function getRequiredColumn<T extends PlanLine>(lines: PlanLine[] = []): C
   return withTableHugColumn(
     {
       title: 'Required',
-      dataIndex: 'requiredQty',
+      key: 'requiredQty',
       ...getNumericQtySortFilter<T>((record) => record.requiredQty, lines as T[]),
+      render: (_: unknown, record: T) => record.requiredQty,
     },
     REQUIRED_HUG_COLUMN_WIDTH,
   );
@@ -339,8 +348,62 @@ export function getToBringColumn<T extends PlanLine>(lines: PlanLine[] = []): Co
   );
 }
 
-export function getRequiredToBringInWarehouseColumns<T extends PlanLine>(
+export function getIssuedColumnLinkRenderer(
+  onEditIssued: (line: PlanLine) => void,
+): NonNullable<ColumnType<PlanLine>['render']> {
+  return (_: unknown, record: PlanLine) => (
+    <Button
+      type="link"
+      size="small"
+      className="issued-qty-link"
+      style={{ padding: 0 }}
+      onClick={() => onEditIssued(record)}
+    >
+      {getDisplayIssuedQty(record)}
+    </Button>
+  );
+}
+
+export function getIssuedColumn<T extends PlanLine>(
+  lines: PlanLine[] = [],
+  onEditIssued?: (line: PlanLine) => void,
+): ColumnType<T> {
+  const render = onEditIssued
+    ? (getIssuedColumnLinkRenderer(onEditIssued) as ColumnType<T>['render'])
+    : (_: unknown, record: T) => getDisplayIssuedQty(record);
+
+  return withTableHugColumn(
+    {
+      title: 'Issued',
+      key: 'issuedQty',
+      ...getNumericQtySortFilter<T>((record) => getDisplayIssuedQty(record), lines as T[]),
+      render,
+    },
+    ISSUED_HUG_COLUMN_WIDTH,
+  );
+}
+
+export function getFulfillmentColumn<T extends PlanLine>(): ColumnType<T> {
+  return {
+    title: 'Fulfillment',
+    key: 'fulfillment',
+    width: FULFILLMENT_COLUMN_WIDTH,
+    render: (_: unknown, record: T) => <FulfillmentStatusTags line={record} />,
+  };
+}
+
+export function getStatusColumn<T extends PlanLine>(): ColumnType<T> {
+  return {
+    title: 'Status',
+    key: 'status',
+    width: STATUS_COLUMN_WIDTH,
+    render: (_: unknown, record: T) => <LineStatusTags line={record} />,
+  };
+}
+
+export function getRequiredToBringWarehouseIssuedColumns<T extends PlanLine>(
   onViewInventory?: (line: PlanLine) => void,
+  onEditIssued?: (line: PlanLine) => void,
   options: { lines?: PlanLine[] } = {},
 ): ColumnType<T>[] {
   const lines = options.lines ?? [];
@@ -351,6 +414,27 @@ export function getRequiredToBringInWarehouseColumns<T extends PlanLine>(
     getRequiredColumn<T>(lines),
     getToBringColumn<T>(lines),
     getAvailableColumn<T>(inventoryRender, { lines }),
+    getIssuedColumn<T>(lines, onEditIssued),
+  ];
+}
+
+export function getFulfillmentStatusColumns<T extends PlanLine>(): ColumnType<T>[] {
+  return [getFulfillmentColumn<T>(), getStatusColumn<T>()];
+}
+
+/** @deprecated Use getRequiredToBringWarehouseIssuedColumns + getFulfillmentStatusColumns */
+export function getRequiredToBringInWarehouseColumns<T extends PlanLine>(
+  onViewInventory?: (line: PlanLine) => void,
+  options: { lines?: PlanLine[]; onEditIssued?: (line: PlanLine) => void } = {},
+): ColumnType<T>[] {
+  const lines = options.lines ?? [];
+  return [
+    ...getRequiredToBringWarehouseIssuedColumns<T>(
+      onViewInventory,
+      options.onEditIssued,
+      { lines },
+    ),
+    ...getFulfillmentStatusColumns<T>(),
   ];
 }
 
@@ -489,16 +573,22 @@ export function getPolActionColumn(
   };
 }
 
-/** POL tab: reference columns with optional edit for to-bring and remarks. */
+/** POL tab: reference columns with warehouse, issued, fulfillment, status. */
 export function getPolReferenceColumns<T extends PlanLine>(
   platform: Platform,
   variant: string,
   columnVisibility: Partial<Record<'remarks' | 'uom', boolean>> = {},
   tableOptions: ComponentTableColumnOptions = {},
+  onViewInventory?: (line: PlanLine) => void,
+  onEditIssued?: (line: PlanLine) => void,
 ): ColumnType<T>[] {
   const showRemarks = columnVisibility.remarks !== false;
   const showUom = columnVisibility.uom !== false;
   const lines = tableOptions.lines ?? [];
+
+  const inventoryRender = onViewInventory
+    ? (getAvailableColumnLinkRenderer(onViewInventory) as ColumnType<T>['render'])
+    : undefined;
 
   const columns: ColumnType<T>[] = [
     {
@@ -517,6 +607,8 @@ export function getPolReferenceColumns<T extends PlanLine>(
     ...getComponentPlatformVariantColumns<T>(platform, variant, tableOptions),
     getRequiredColumn<T>(lines),
     getToBringColumn<T>(lines),
+    getAvailableColumn<T>(inventoryRender, { lines }),
+    getIssuedColumn<T>(lines, onEditIssued),
   ];
 
   if (showUom) {
@@ -526,7 +618,7 @@ export function getPolReferenceColumns<T extends PlanLine>(
     columns.push(getRemarksColumn<T>());
   }
 
-  columns.push(...getApprovalMetaColumns<T>(lines));
+  columns.push(...getFulfillmentStatusColumns<T>(), ...getApprovalMetaColumns<T>(lines));
 
   return columns;
 }
@@ -539,6 +631,7 @@ export function getOperationalComponentColumns(
   columnVisibility: Partial<Record<'trade' | 'system' | 'mrpController' | 'remarks', boolean>> = {},
   tableOptions: ComponentTableColumnOptions = {},
   onViewNsn?: (line: PlanLine) => void,
+  onEditIssued?: (line: PlanLine) => void,
 ): ColumnType<PlanLine>[] {
   const showTrade = category === 'LRU' && columnVisibility.trade === true;
   const showSystem = category === 'LRU' && columnVisibility.system === true;
@@ -562,7 +655,8 @@ export function getOperationalComponentColumns(
 
   columns.push(
     ...getComponentPlatformVariantColumns<PlanLine>(platform, variant, tableOptions),
-    ...getRequiredToBringInWarehouseColumns<PlanLine>(onViewInventory, { lines }),
+    ...getRequiredToBringWarehouseIssuedColumns<PlanLine>(onViewInventory, onEditIssued, { lines }),
+    ...getFulfillmentStatusColumns<PlanLine>(),
   );
 
   if (showRemarks) {
@@ -583,9 +677,11 @@ export function computeOperationalTableScrollX(
     REQUIRED_HUG_COLUMN_WIDTH,
     TO_BRING_HUG_COLUMN_WIDTH,
     WAREHOUSE_HUG_COLUMN_WIDTH,
+    ISSUED_HUG_COLUMN_WIDTH,
+    FULFILLMENT_COLUMN_WIDTH,
+    STATUS_COLUMN_WIDTH,
     APPROVED_BY_COLUMN_WIDTH,
     APPROVED_ON_COLUMN_WIDTH,
-    STATUS_COLUMN_WIDTH,
     ACTION_COLUMN_WIDTH,
   ];
 
@@ -599,7 +695,7 @@ export function computeOperationalTableScrollX(
     extraWidths.unshift(MRP_CONTROLLER_COLUMN_WIDTH);
   }
   if (columnVisibility.remarks !== false) {
-    extraWidths.splice(-2, 0, REMARKS_COLUMN_WIDTH);
+    extraWidths.splice(-3, 0, REMARKS_COLUMN_WIDTH);
   }
 
   return computeDetachmentTableScrollX(extraWidths);
@@ -607,13 +703,15 @@ export function computeOperationalTableScrollX(
 
 export function computePolTableScrollX(
   columnVisibility: Partial<Record<'remarks' | 'uom', boolean>> = {},
-  options: { includeStatus?: boolean; includeAction?: boolean } = {},
+  options: { includeAction?: boolean } = {},
 ): number {
-  const { includeStatus = false, includeAction = false } = options;
+  const { includeAction = false } = options;
   const extraWidths = [
     COMPONENT_PLATFORM_VARIANT_WIDTH,
     REQUIRED_HUG_COLUMN_WIDTH,
     TO_BRING_HUG_COLUMN_WIDTH,
+    WAREHOUSE_HUG_COLUMN_WIDTH,
+    ISSUED_HUG_COLUMN_WIDTH,
   ];
 
   if (columnVisibility.uom !== false) {
@@ -622,10 +720,14 @@ export function computePolTableScrollX(
   if (columnVisibility.remarks !== false) {
     extraWidths.push(REMARKS_COLUMN_WIDTH);
   }
-  extraWidths.push(APPROVED_BY_COLUMN_WIDTH, APPROVED_ON_COLUMN_WIDTH);
-  if (includeStatus) {
-    extraWidths.push(STATUS_COLUMN_WIDTH);
-  }
+
+  extraWidths.push(
+    FULFILLMENT_COLUMN_WIDTH,
+    STATUS_COLUMN_WIDTH,
+    APPROVED_BY_COLUMN_WIDTH,
+    APPROVED_ON_COLUMN_WIDTH,
+  );
+
   if (includeAction) {
     extraWidths.push(ACTION_COLUMN_WIDTH);
   }
@@ -654,7 +756,14 @@ export function getSummaryDeviationDeltaColumn<T extends PlanLine>(
     title: 'Deviation',
     key: 'delta',
     width,
-    onCell: () => ({ className: 'deviation-delta-cell' }),
+    onCell: (record: T) => {
+      const delta = getDeviationDelta(record);
+      const className =
+        delta < 0
+          ? 'deviation-delta-cell deviation-delta-cell--down'
+          : 'deviation-delta-cell';
+      return { className };
+    },
     render: (_: unknown, record: T) => {
       const delta = getDeviationDelta(record);
       return delta >= 0 ? `+${delta}` : delta;
@@ -690,7 +799,7 @@ export function computeDetachmentTableScrollX(extraColumnWidths: number[]): numb
   return NSN_MPN_DESCRIPTION_WIDTH + extraColumnWidths.reduce((sum, width) => sum + width, 0);
 }
 
-/** LRU tab: Trade, System, Platform, Variant, Required, To-bring, Warehouse, Remarks, Approved by, Approved on, Status, Action */
+/** LRU tab: Trade, System, Platform, Variant, Required, To-bring, Warehouse, Issued, Fulfillment, Remarks, Approved by, Approved on, Status, Action */
 export const LRU_OPERATIONAL_TABLE_SCROLL_X = computeDetachmentTableScrollX([
   TRADE_COLUMN_WIDTH,
   SYSTEM_COLUMN_WIDTH,
@@ -698,6 +807,8 @@ export const LRU_OPERATIONAL_TABLE_SCROLL_X = computeDetachmentTableScrollX([
   REQUIRED_HUG_COLUMN_WIDTH,
   TO_BRING_HUG_COLUMN_WIDTH,
   WAREHOUSE_HUG_COLUMN_WIDTH,
+  ISSUED_HUG_COLUMN_WIDTH,
+  FULFILLMENT_COLUMN_WIDTH,
   REMARKS_COLUMN_WIDTH,
   APPROVED_BY_COLUMN_WIDTH,
   APPROVED_ON_COLUMN_WIDTH,
@@ -705,12 +816,14 @@ export const LRU_OPERATIONAL_TABLE_SCROLL_X = computeDetachmentTableScrollX([
   ACTION_COLUMN_WIDTH,
 ]);
 
-/** Consumable tab: Platform, Variant, Required, To-bring, Warehouse, Remarks, Approved by, Approved on, Status, Action */
+/** Consumable tab: Platform, Variant, Required, To-bring, Warehouse, Issued, Fulfillment, Remarks, Approved by, Approved on, Status, Action */
 export const CONSUMABLE_OPERATIONAL_TABLE_SCROLL_X = computeDetachmentTableScrollX([
   COMPONENT_PLATFORM_VARIANT_WIDTH,
   REQUIRED_HUG_COLUMN_WIDTH,
   TO_BRING_HUG_COLUMN_WIDTH,
   WAREHOUSE_HUG_COLUMN_WIDTH,
+  ISSUED_HUG_COLUMN_WIDTH,
+  FULFILLMENT_COLUMN_WIDTH,
   REMARKS_COLUMN_WIDTH,
   APPROVED_BY_COLUMN_WIDTH,
   APPROVED_ON_COLUMN_WIDTH,
@@ -739,6 +852,9 @@ export function computeWorkQueueTableScrollX(
     REQUIRED_HUG_COLUMN_WIDTH,
     TO_BRING_HUG_COLUMN_WIDTH,
     WAREHOUSE_HUG_COLUMN_WIDTH,
+    ISSUED_HUG_COLUMN_WIDTH,
+    FULFILLMENT_COLUMN_WIDTH,
+    STATUS_COLUMN_WIDTH,
     SUMMARY_SEVENTH_COLUMN_WIDTH,
     SUMMARY_EDIT_COLUMN_WIDTH,
   ];
@@ -758,6 +874,9 @@ export function computeAwaitingSparesTableScrollX(
     REQUIRED_HUG_COLUMN_WIDTH,
     TO_BRING_HUG_COLUMN_WIDTH,
     WAREHOUSE_HUG_COLUMN_WIDTH,
+    ISSUED_HUG_COLUMN_WIDTH,
+    FULFILLMENT_COLUMN_WIDTH,
+    STATUS_COLUMN_WIDTH,
     FLEX_TEXT_COLUMN_MIN_WIDTH,
     SUMMARY_EDIT_COLUMN_WIDTH,
   ];
@@ -769,23 +888,27 @@ export function computeAwaitingSparesTableScrollX(
   return computeDetachmentTableScrollX(extraWidths);
 }
 
-/** Approval pack shortfall: Platform/Variant, Required, To-bring, Warehouse, Shortfall, Resolution, Edit */
+/** Approval pack shortfall: Platform/Variant, Required, To-bring, Warehouse, Issued, Fulfillment, Shortfall, Resolution, Edit */
 export const APPROVAL_PACK_SHORTFALL_SCROLL_X = computeDetachmentTableScrollX([
   PLATFORM_VARIANT_COLUMN_WIDTH,
   REQUIRED_HUG_COLUMN_WIDTH,
   TO_BRING_HUG_COLUMN_WIDTH,
   WAREHOUSE_HUG_COLUMN_WIDTH,
+  ISSUED_HUG_COLUMN_WIDTH,
+  FULFILLMENT_COLUMN_WIDTH,
   SUMMARY_SEVENTH_COLUMN_WIDTH,
   FLEX_TEXT_COLUMN_MIN_WIDTH,
   SUMMARY_EDIT_COLUMN_WIDTH,
 ]);
 
-/** Approval pack deviation: Platform/Variant, Required, To-bring, Warehouse, Deviation, Reason, Edit */
+/** Approval pack deviation: Platform/Variant, Required, To-bring, Warehouse, Issued, Fulfillment, Deviation, Reason, Edit */
 export const APPROVAL_PACK_DEVIATION_SCROLL_X = computeDetachmentTableScrollX([
   PLATFORM_VARIANT_COLUMN_WIDTH,
   REQUIRED_HUG_COLUMN_WIDTH,
   TO_BRING_HUG_COLUMN_WIDTH,
   WAREHOUSE_HUG_COLUMN_WIDTH,
+  ISSUED_HUG_COLUMN_WIDTH,
+  FULFILLMENT_COLUMN_WIDTH,
   80,
   FLEX_TEXT_COLUMN_MIN_WIDTH,
   SUMMARY_EDIT_COLUMN_WIDTH,

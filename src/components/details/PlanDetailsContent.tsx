@@ -16,6 +16,8 @@ import {
   countApprovedPackLines,
   countAwaitingSparesLines,
   countWorkQueueLines,
+  syncLineIssuance,
+  syncPlanLinesIssuance,
 } from '../../types/planLine';
 import type { OfflineApprovalRecord, PlanLine } from '../../types/planLine';
 import { isPolLine } from '../../types/planLine';
@@ -35,6 +37,7 @@ import EditLineDrawer from './EditLineDrawer';
 import EditPolLineDrawer from './EditPolLineDrawer';
 import EditParametersModal from './EditParametersModal';
 import RemarksModal from './RemarksModal';
+import IssuedQtyDrawer from './IssuedQtyDrawer';
 import DuplicatePlanModal from '../plans/DuplicatePlanModal';
 
 const STATUS_COLORS: Record<string, string> = {
@@ -45,7 +48,7 @@ const STATUS_COLORS: Record<string, string> = {
 
 type PlanTabKey =
   | 'work-queue'
-  | 'awaiting-spares'
+  | 'awaiting-supply'
   | 'all-components'
   | 'approval-pack'
   | 'approved';
@@ -74,6 +77,7 @@ export default function PlanDetailsContent({
   const [editParamsOpen, setEditParamsOpen] = useState(false);
   const [duplicateOpen, setDuplicateOpen] = useState(false);
   const [addNsnOpen, setAddNsnOpen] = useState(false);
+  const [issuedLine, setIssuedLine] = useState<PlanLine | null>(null);
 
   const existingNsns = useMemo(() => lines.map((line) => line.nsn), [lines]);
   const variantLabel = formatVariantLabels(plan);
@@ -92,13 +96,22 @@ export default function PlanDetailsContent({
 
   const handleSaveLine = (updated: PlanLine) => {
     const previous = lines.find((l) => l.id === updated.id);
-    const next = lines.map((l) => (l.id === updated.id ? updated : l));
-    updatePlanLines(planId, next);
+    const synced = syncLineIssuance(updated);
+    const next = lines.map((l) => (l.id === synced.id ? synced : l));
+    updatePlanLines(planId, syncPlanLinesIssuance(next));
     if (isPolLine(updated)) {
       message.success('POL line updated');
       return;
     }
-    showPlanLineSaveToast(message, previous, updated);
+    showPlanLineSaveToast(message, previous, synced);
+  };
+
+  const handleSaveIssuedQty = (line: PlanLine, issuedQty: number) => {
+    const next = lines.map((l) =>
+      l.id === line.id ? syncLineIssuance({ ...l, issuedQty }) : l,
+    );
+    updatePlanLines(planId, syncPlanLinesIssuance(next));
+    message.success('Issued qty updated');
   };
 
   const handleAddNsns = (entries: NsnCatalogEntry[], deviationReason: string) => {
@@ -132,13 +145,14 @@ export default function PlanDetailsContent({
           viewOnly={viewOnly}
           onEditLine={openEditLine}
           onViewInventory={setInventoryLine}
+          onEditIssued={setIssuedLine}
           onViewNsn={setSparesDetailLine}
         />
       ),
     },
     {
-      key: 'awaiting-spares',
-      label: `Awaiting spares${awaitingSparesCount > 0 ? ` (${awaitingSparesCount})` : ''}`,
+      key: 'awaiting-supply',
+      label: `Awaiting supply${awaitingSparesCount > 0 ? ` (${awaitingSparesCount})` : ''}`,
       children: (
         <AwaitingSparesTab
           lines={lines}
@@ -147,6 +161,7 @@ export default function PlanDetailsContent({
           viewOnly={viewOnly}
           onEditLine={openEditLine}
           onViewInventory={setInventoryLine}
+          onEditIssued={setIssuedLine}
           onViewNsn={setSparesDetailLine}
         />
       ),
@@ -162,6 +177,7 @@ export default function PlanDetailsContent({
           viewOnly={viewOnly}
           onEditLine={openEditLine}
           onViewInventory={setInventoryLine}
+          onEditIssued={setIssuedLine}
           onViewNsn={setSparesDetailLine}
           onAddNsn={() => setAddNsnOpen(true)}
           onDeleteLine={handleDeleteLine}
@@ -274,6 +290,14 @@ export default function PlanDetailsContent({
         open={!!inventoryLine}
         sparesRequiredBy={detachment.detachmentDateStart}
         onClose={() => setInventoryLine(null)}
+      />
+
+      <IssuedQtyDrawer
+        line={issuedLine}
+        open={!!issuedLine}
+        viewOnly={viewOnly}
+        onClose={() => setIssuedLine(null)}
+        onSave={handleSaveIssuedQty}
       />
 
       <SparesDetailPlaceholderModal

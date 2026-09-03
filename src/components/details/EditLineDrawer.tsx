@@ -31,9 +31,11 @@ import type {
 import {
   canAcceptShortfall,
   canDeviateQty,
+  clearOfflineApproval,
   getGroupAvailableQty,
   getPrimaryMemberNsn,
   getShortfallQty,
+  hasApprovalResolutionChange,
   hasDeviationCondition,
   hasShortfallCondition,
   isLineFulfilled,
@@ -462,10 +464,20 @@ export default function EditLineDrawer({
       } else {
         updated.deviationReason = undefined;
         updated.deviationRemarks = undefined;
-        updated.offlineApproval = undefined;
       }
 
-      onSave(updated);
+      let result = updated;
+      if (line.offlineApproval && hasApprovalResolutionChange(line, result)) {
+        result = clearOfflineApproval(result);
+      } else if (!needsDeviation && !needsShortfall) {
+        result = {
+          ...result,
+          offlineApproval: undefined,
+          deviationApproved: undefined,
+        };
+      }
+
+      onSave(result);
       onClose();
     } catch {
       // validation failed

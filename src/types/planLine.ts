@@ -1,4 +1,6 @@
-export type LineStatus = 'Met' | 'Deviation' | 'Shortfall';
+export type LineStatus = 'Available' | 'Deviation' | 'Shortfall';
+
+export type FulfillmentStatus = 'Partially fulfilled' | 'Fulfilled';
 
 export type ShortfallActionType = 'accept' | 'wait' | 'cannibalise';
 
@@ -10,6 +12,24 @@ export interface OfflineApprovalRecord {
   approverName: string;
   approvedDate: string;
   meeting?: string;
+}
+
+/** Frozen plan-line fields captured when an offline approval is saved. */
+export interface ApprovalSnapshotState {
+  requiredQty: number;
+  availableQty: number;
+  toBringQty: number;
+  issuedQty?: number;
+  shortfallActions: ShortfallAction[];
+  deviationReason?: string;
+  deviationRemarks?: string;
+  remarks?: string;
+}
+
+export interface ApprovalSnapshot {
+  id: string;
+  approval: OfflineApprovalRecord;
+  lineState: ApprovalSnapshotState;
 }
 
 export type InventoryStatus = 'In WH' | 'Blocked' | 'QI' | 'QIT';
@@ -87,6 +107,8 @@ export interface PlanLine {
   requiredQty: number;
   availableQty: number;
   toBringQty: number;
+  /** Qty goods-issued from warehouse to this plan line (synced from ES). */
+  issuedQty?: number;
   inventory: InventoryItem[];
   shortfallActions: ShortfallAction[];
   deviationReason?: DeviationReason;
@@ -94,6 +116,10 @@ export interface PlanLine {
   /** @deprecated Use offlineApproval */
   deviationApproved?: boolean;
   offlineApproval?: OfflineApprovalRecord;
+  /** Historical approval records — each save appends an immutable snapshot. */
+  approvalSnapshots?: ApprovalSnapshot[];
+  /** Live plan line id when this object is a reconstructed approval snapshot row. */
+  approvalSourceLineId?: string;
   /** User-added NSN for exercise needs; not from L-series template. */
   isAddedNsn?: boolean;
   componentCategory?: ComponentCategory;
@@ -121,8 +147,80 @@ export interface RepairEddOption {
 }
 
 export function formatLineStatus(status: LineStatus): string {
-  if (status === 'Met') return 'Fulfilled';
   return status;
+}
+
+export function formatFulfillmentStatus(status: FulfillmentStatus): string {
+  return status;
+}
+
+/** Optional L-series line (required = 0). Excludes user-added NSNs — those are deviations. */
+export function isAsRequiredLine(
+  line: Pick<PlanLine, 'requiredQty' | 'isAddedNsn'>,
+): boolean {
+  if (line.isAddedNsn) return false;
+  return line.requiredQty === 0;
+}
+
+export function getIssuedQty(line: PlanLine): number {
+  return line.issuedQty ?? 0;
+}
+
+/** Warehouse ≤ 2 or warehouse = to-bring — OC approval before manual issue. */
+export function needsOcApprovalForIssue(line: PlanLine): boolean {
+  const toBring = line.toBringQty;
+  if (toBring <= 0) return false;
+  if (hasShortfallCondition(line)) return false;
+  const warehouse = getGroupAvailableQty(line);
+  return warehouse <= 2 || warehouse === toBring;
+}
+
+/** Warehouse > to-bring — reserved and auto-issued offline (prototype). */
+export function isAutoIssuedLine(line: PlanLine): boolean {
+  const toBring = line.toBringQty;
+  if (toBring <= 0) return false;
+  if (hasShortfallCondition(line)) return false;
+  const warehouse = getGroupAvailableQty(line);
+  return warehouse > toBring;
+}
+
+/** Issued qty for display — auto-issued lines always show to-bring. */
+export function getDisplayIssuedQty(line: PlanLine): number {
+  if (isAutoIssuedLine(line)) return line.toBringQty;
+  return getIssuedQty(line);
+}
+
+export function syncLineIssuance(line: PlanLine): PlanLine {
+  if (isAutoIssuedLine(line)) {
+    return { ...line, issuedQty: line.toBringQty };
+  }
+  return line;
+}
+
+export function syncPlanLinesIssuance(lines: PlanLine[]): PlanLine[] {
+  return lines.map(syncLineIssuance);
+}
+
+/** ES-fed fulfillment derived from issued vs to-bring. */
+export function getFulfillmentStatus(line: PlanLine): FulfillmentStatus | null {
+  const issued = getDisplayIssuedQty(line);
+  const { toBringQty } = line;
+  if (toBringQty <= 0 && issued <= 0) return null;
+  if (toBringQty > 0 && issued >= toBringQty) return 'Fulfilled';
+  if (issued > 0) return 'Partially fulfilled';
+  return null;
+}
+
+export type FulfillmentFilter = 'all' | 'none' | FulfillmentStatus;
+
+export function lineMatchesFulfillmentFilter(
+  line: PlanLine,
+  filter: FulfillmentFilter,
+): boolean {
+  if (filter === 'all') return true;
+  const status = getFulfillmentStatus(line);
+  if (filter === 'none') return status === null;
+  return status === filter;
 }
 
 export function isPolLine(line: PlanLine): boolean {
@@ -137,7 +235,7 @@ export function getOperationalLines(lines: PlanLine[]): PlanLine[] {
 export function getPolLineStatus(line: PlanLine): LineStatus {
   if (line.toBringQty < line.requiredQty) return 'Shortfall';
   if (line.toBringQty > line.requiredQty) return 'Deviation';
-  return 'Met';
+  return 'Available';
 }
 
 export function getDefaultToBringQty(requiredQty: number): number {
@@ -154,6 +252,7 @@ export function getGroupAvailableQty(line: PlanLine): number {
 /** To-bring exceeds available stock. */
 export function hasShortfallCondition(line: PlanLine): boolean {
   if (isPolLine(line)) return line.toBringQty < line.requiredQty;
+  if (isAsRequiredLine(line) && line.toBringQty <= 0) return false;
   return line.toBringQty > getGroupAvailableQty(line);
 }
 
@@ -161,7 +260,7 @@ export function hasAwaitingSparesResolution(line: PlanLine): boolean {
   return line.shortfallActions.some((action) => action.type === 'wait');
 }
 
-/** Shortfall resolved only via awaiting spares — fulfilled without approval. */
+/** Shortfall resolved only via awaiting supply — fulfilled without approval. */
 export function isAwaitingSparesOnlyShortfallResolution(line: PlanLine): boolean {
   if (!hasShortfallCondition(line)) return false;
   if (line.shortfallActions.length === 0) return false;
@@ -191,13 +290,18 @@ export function canAcceptShortfall(line: PlanLine): boolean {
 
 /** To-bring differs from the L-series requirement (or line was added to the plan). */
 export function hasDeviationCondition(line: PlanLine): boolean {
+  if (isAsRequiredLine(line)) return false;
   if (isPolLine(line)) return line.toBringQty > line.requiredQty;
   return line.isAddedNsn || line.toBringQty !== line.requiredQty;
 }
 
-/** No shortfall or deviation conditions — available covers to-bring and to-bring matches required. */
+/**
+ * Planning-side “resolved” state for edit UX (shortfall / deviation workflow).
+ * Fill-rate KPIs use {@link countsAsFillRateFulfilled} (ES issuance) instead.
+ */
 export function isLineFulfilled(line: PlanLine): boolean {
-  if (isPolLine(line)) return getPolLineStatus(line) === 'Met';
+  if (isAsRequiredLine(line) && line.toBringQty <= 0) return false;
+  if (isPolLine(line)) return getPolLineStatus(line) === 'Available';
 
   if (hasDeviationCondition(line) && !hasDeviationResolutionRecorded(line)) {
     return false;
@@ -210,11 +314,22 @@ export function isLineFulfilled(line: PlanLine): boolean {
   return isAwaitingSparesOnlyShortfallResolution(line);
 }
 
+/** Lines that count toward fill-rate KPIs. As-required spares are always excluded. */
+export function countsTowardPlanningFillRate(line: PlanLine): boolean {
+  if (isAsRequiredLine(line)) return false;
+  return true;
+}
+
+/** ES fulfillment — issued qty meets or exceeds to-bring. */
+export function countsAsFillRateFulfilled(line: PlanLine): boolean {
+  return getFulfillmentStatus(line) === 'Fulfilled';
+}
+
 /** Active statuses for a line (shortfall and deviation can coexist). */
 export function getLineStatuses(line: PlanLine): LineStatus[] {
   if (isPolLine(line)) {
     const status = getPolLineStatus(line);
-    return status === 'Met' ? ['Met'] : [status];
+    return status === 'Available' ? ['Available'] : [status];
   }
   const statuses: LineStatus[] = [];
   if (
@@ -224,16 +339,16 @@ export function getLineStatuses(line: PlanLine): LineStatus[] {
     statuses.push('Shortfall');
   }
   if (hasDeviationCondition(line)) statuses.push('Deviation');
-  if (statuses.length === 0) statuses.push('Met');
+  if (statuses.length === 0) statuses.push('Available');
   return statuses;
 }
 
-/** Primary status for sorting and single-tag fallbacks (Shortfall > Deviation > Met). */
+/** Primary status for sorting and single-tag fallbacks (Shortfall > Deviation > Available). */
 export function getLineStatus(line: PlanLine): LineStatus {
   const statuses = getLineStatuses(line);
   if (statuses.includes('Shortfall')) return 'Shortfall';
   if (statuses.includes('Deviation')) return 'Deviation';
-  return 'Met';
+  return 'Available';
 }
 
 export function getShortfallQty(line: PlanLine): number {
@@ -271,10 +386,10 @@ export function canDeviateQty(line: PlanLine): boolean {
   return !line.isAddedNsn && !isPolLine(line) && isLineFulfilled(line);
 }
 
+/** Plan fill rate = average of LRU, Consumable, and POL category fill rates. */
 export function computeFillRate(lines: PlanLine[]): number {
-  if (lines.length === 0) return 0;
-  const fulfilled = lines.filter((line) => isLineFulfilled(line)).length;
-  return Math.round((fulfilled / lines.length) * 100);
+  const { LRU, Consumable, POL } = computeCategoryFillRates(lines);
+  return Math.round((LRU + Consumable + POL) / 3);
 }
 
 export function getLinesForCategory(
@@ -287,19 +402,11 @@ export function getLinesForCategory(
   return lines.filter((line) => line.componentCategory === category);
 }
 
-export function isPolFulfilled(line: PlanLine): boolean {
-  return isPolLine(line) && getPolLineStatus(line) === 'Met';
-}
-
 export function computeCategoryFillRate(
   lines: PlanLine[],
   category: ComponentCategory,
 ): number {
-  const categoryLines = getLinesForCategory(lines, category);
-  if (categoryLines.length === 0) return 0;
-
-  const fulfilled = categoryLines.filter((line) => isLineFulfilled(line)).length;
-  return Math.round((fulfilled / categoryLines.length) * 100);
+  return getCategoryFulfillmentSummary(lines, category).percent;
 }
 
 export interface CategoryFillRates {
@@ -327,13 +434,14 @@ export function getCategoryFulfillmentSummary(
   category: ComponentCategory,
 ): CategoryFulfillmentSummary {
   const categoryLines = getLinesForCategory(lines, category);
-  const total = categoryLines.length;
+  const eligible = categoryLines.filter(countsTowardPlanningFillRate);
+  const total = eligible.length;
 
   if (total === 0) {
     return { fulfilled: 0, total: 0, percent: 0 };
   }
 
-  const fulfilled = categoryLines.filter((line) => isLineFulfilled(line)).length;
+  const fulfilled = eligible.filter((line) => countsAsFillRateFulfilled(line)).length;
 
   return {
     fulfilled,
@@ -560,14 +668,23 @@ export function hasDeviationResolutionRecorded(line: PlanLine): boolean {
 }
 
 export function isDeviationUnresolved(line: PlanLine): boolean {
+  if (!hasDeviationCondition(line)) return false;
   if (isPolLine(line)) {
     return getPolLineStatus(line) === 'Deviation' && !line.deviationReason?.trim();
   }
-  return hasDeviationCondition(line) && !hasDeviationResolutionRecorded(line);
+  return !hasDeviationResolutionRecorded(line);
 }
 
+/**
+ * Action required = unresolved stock shortfall on L-series-aligned lines only.
+ * Deviations (to-bring ≠ required) are resolved via Edit/Deviate on All components,
+ * not the work queue — even when the deviation creates a warehouse gap.
+ */
 export function isActionRequired(line: PlanLine): boolean {
-  return isShortfallUnresolved(line) || isDeviationUnresolved(line);
+  if (!isShortfallUnresolved(line)) return false;
+  if (isPolLine(line)) return true;
+  if (isAsRequiredLine(line)) return line.toBringQty > 0;
+  return line.toBringQty === line.requiredQty && !line.isAddedNsn;
 }
 
 export function isInterchangeableLine(line: PlanLine): boolean {
@@ -609,7 +726,7 @@ export function hasResolutionRecorded(line: PlanLine): boolean {
   if (isPolLine(line)) {
     const status = getPolLineStatus(line);
     if (status === 'Deviation') return !!(line.deviationReason?.trim());
-    return status === 'Met';
+    return status === 'Available';
   }
   return hasShortfallResolutionRecorded(line) && hasDeviationResolutionRecorded(line);
 }
@@ -637,11 +754,19 @@ export function lineNeedsDeviationApproval(line: PlanLine): boolean {
   return hasDeviationCondition(line) && hasDeviationResolutionRecorded(line);
 }
 
+export function lineNeedsOcApproval(line: PlanLine): boolean {
+  return needsOcApprovalForIssue(line) && line.toBringQty > 0;
+}
+
 export function lineNeedsApproval(line: PlanLine): boolean {
   if (isPolLine(line)) {
     return getPolLineStatus(line) === 'Deviation';
   }
-  return lineNeedsShortfallApproval(line) || lineNeedsDeviationApproval(line);
+  return (
+    lineNeedsShortfallApproval(line) ||
+    lineNeedsDeviationApproval(line) ||
+    lineNeedsOcApproval(line)
+  );
 }
 
 /** Line has resolution recorded and belongs in the approval pack (not work queue). */
@@ -700,7 +825,7 @@ export function sortShortfallLinesByApproval(lines: PlanLine[]): PlanLine[] {
   return [...lines].sort((a, b) => rank(a) - rank(b));
 }
 
-/** Lines needing shortfall or deviation action before approval pack. */
+/** Lines with unresolved L-series-aligned stock shortfalls (work queue). */
 export function getWorkQueueLines(lines: PlanLine[]): PlanLine[] {
   return lines.filter(isActionRequired);
 }
@@ -725,7 +850,11 @@ export function getApprovalPackLines(
       ? withResolution
       : filter === 'pending'
         ? withResolution.filter((l) => getLineApprovalStatus(l) === 'unapproved')
-        : withResolution.filter((l) => getLineApprovalStatus(l) === 'approved');
+        : [];
+
+  if (filter === 'approved') {
+    return getApprovedPackLines(lines);
+  }
 
   const sortUnapprovedFirst = (items: PlanLine[]) =>
     [...items].sort((a, b) => {
@@ -750,6 +879,7 @@ export function applyOfflineApproval(
   line: PlanLine,
   approval: OfflineApprovalRecord,
 ): PlanLine {
+  const snapshot = buildApprovalSnapshot(line, approval);
   return {
     ...line,
     offlineApproval: approval,
@@ -758,6 +888,7 @@ export function applyOfflineApproval(
         ? true
         : line.deviationApproved,
     shortfallActions: line.shortfallActions.map((action) => ({ ...action, approved: true })),
+    approvalSnapshots: [...(line.approvalSnapshots ?? []), snapshot],
   };
 }
 
@@ -781,14 +912,123 @@ export function clearOfflineApproval(line: PlanLine): PlanLine {
   };
 }
 
+export function captureApprovalSnapshotState(line: PlanLine): ApprovalSnapshotState {
+  return {
+    requiredQty: line.requiredQty,
+    availableQty: line.availableQty,
+    toBringQty: line.toBringQty,
+    issuedQty: line.issuedQty,
+    shortfallActions: line.shortfallActions.map((action) => ({ ...action })),
+    deviationReason: line.deviationReason,
+    deviationRemarks: line.deviationRemarks,
+    remarks: line.remarks,
+  };
+}
+
+export function buildApprovalSnapshot(
+  line: PlanLine,
+  approval: OfflineApprovalRecord,
+  snapshotId?: string,
+): ApprovalSnapshot {
+  return {
+    id: snapshotId ?? `${line.id}-snap-${approval.approvedDate}-${Date.now()}`,
+    approval,
+    lineState: captureApprovalSnapshotState(line),
+  };
+}
+
+export function getLineApprovalSnapshots(line: PlanLine): ApprovalSnapshot[] {
+  return line.approvalSnapshots ?? [];
+}
+
+export function planLineFromApprovalSnapshot(
+  line: PlanLine,
+  snapshot: ApprovalSnapshot,
+): PlanLine {
+  const { lineState, approval } = snapshot;
+  return {
+    ...line,
+    id: snapshot.id,
+    approvalSourceLineId: line.id,
+    requiredQty: lineState.requiredQty,
+    availableQty: lineState.availableQty,
+    toBringQty: lineState.toBringQty,
+    issuedQty: lineState.issuedQty,
+    shortfallActions: lineState.shortfallActions.map((action) => ({ ...action })),
+    deviationReason: lineState.deviationReason,
+    deviationRemarks: lineState.deviationRemarks,
+    remarks: lineState.remarks ?? line.remarks,
+    offlineApproval: approval,
+    deviationApproved: undefined,
+    approvalSnapshots: undefined,
+  };
+}
+
+/** All immutable approval snapshot rows for the Approved tab (newest first). */
+export function getApprovedSnapshotLines(lines: PlanLine[]): PlanLine[] {
+  const rows: PlanLine[] = [];
+
+  for (const line of lines) {
+    for (const snapshot of getLineApprovalSnapshots(line)) {
+      rows.push(planLineFromApprovalSnapshot(line, snapshot));
+    }
+  }
+
+  // Legacy: approved before snapshot support — show current line once until re-approved.
+  for (const line of lines) {
+    if (isLineApprovalComplete(line) && getLineApprovalSnapshots(line).length === 0) {
+      rows.push(line);
+    }
+  }
+
+  return rows.sort((a, b) => {
+    const aDate = a.offlineApproval?.approvedDate ?? '';
+    const bDate = b.offlineApproval?.approvedDate ?? '';
+    return bDate.localeCompare(aDate);
+  });
+}
+
+export function getApprovedPackLines(lines: PlanLine[]): {
+  shortfalls: PlanLine[];
+  deviations: PlanLine[];
+} {
+  const snapshotLines = getApprovedSnapshotLines(lines);
+  return {
+    shortfalls: snapshotLines.filter((line) => lineNeedsShortfallApproval(line)),
+    deviations: snapshotLines.filter(
+      (line) => hasDeviationCondition(line) && hasDeviationResolutionRecorded(line),
+    ),
+  };
+}
+
+export function hasApprovalResolutionChange(before: PlanLine, after: PlanLine): boolean {
+  if (before.toBringQty !== after.toBringQty) return true;
+  if (before.deviationReason !== after.deviationReason) return true;
+  if (before.deviationRemarks !== after.deviationRemarks) return true;
+  if (JSON.stringify(before.shortfallActions) !== JSON.stringify(after.shortfallActions)) {
+    return true;
+  }
+  return false;
+}
+
+export function ensureLegacyApprovalSnapshots(lines: PlanLine[]): PlanLine[] {
+  return lines.map((line) => {
+    if (!line.offlineApproval || line.approvalSnapshots?.length) return line;
+    return {
+      ...line,
+      approvalSnapshots: [buildApprovalSnapshot(line, line.offlineApproval)],
+    };
+  });
+}
+
 export function countApprovalPackLines(lines: PlanLine[]): number {
   const { shortfalls, deviations } = getApprovalPackLines(lines, 'pending');
   return shortfalls.length + deviations.length;
 }
 
 export function countApprovedPackLines(lines: PlanLine[]): number {
-  return getApprovalPackLines(lines, 'approved').shortfalls.length +
-    getApprovalPackLines(lines, 'approved').deviations.length;
+  const { shortfalls, deviations } = getApprovedPackLines(lines);
+  return shortfalls.length + deviations.length;
 }
 
 export function countWorkQueueLines(lines: PlanLine[]): number {

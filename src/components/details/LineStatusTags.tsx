@@ -3,7 +3,7 @@ import type { LineStatus, PlanLine } from '../../types/planLine';
 import { formatLineStatus, getLineStatuses } from '../../types/planLine';
 
 const STATUS_TAG_COLORS: Record<LineStatus, string> = {
-  Met: 'success',
+  Available: 'success',
   Deviation: 'warning',
   Shortfall: 'error',
 };

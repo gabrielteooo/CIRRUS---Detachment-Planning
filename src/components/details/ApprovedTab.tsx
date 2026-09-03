@@ -3,7 +3,7 @@ import { Button, Empty, Table, Typography } from 'antd';
 import {
   formatShortfallActions,
   formatDeviationResolution,
-  getApprovalPackLines,
+  getApprovedPackLines,
 } from '../../types/planLine';
 import type { PlanLine } from '../../types/planLine';
 import type { Platform } from '../../types/detachment';
@@ -66,7 +66,7 @@ export default function ApprovedTab({
   onViewNsn,
 }: ApprovedTabProps) {
   const { shortfalls, deviations } = useMemo(
-    () => getApprovalPackLines(lines, 'approved'),
+    () => getApprovedPackLines(lines),
     [lines],
   );
   const total = shortfalls.length + deviations.length;
@@ -76,12 +76,14 @@ export default function ApprovedTab({
     key: 'edit',
     width: EDIT_COLUMN_WIDTH,
     fixed: 'right' as const,
-    render: (_: unknown, record: PlanLine) =>
-      !viewOnly ? (
+    render: (_: unknown, record: PlanLine) => {
+      if (viewOnly || record.approvalSourceLineId) return null;
+      return (
         <Button type="link" size="small" onClick={() => onEditLine(record)}>
           Edit
         </Button>
-      ) : null,
+      );
+    },
   };
 
   const shortfallColumns = [
@@ -132,8 +134,8 @@ export default function ApprovedTab({
   return (
     <div className="approval-pack-tab approved-tab">
       <Typography.Paragraph type="secondary" className="approval-pack-tab-intro">
-        Shortfalls and additional requirements that have been approved offline, with approving
-        officer and date recorded.
+        Immutable snapshots of each offline approval. If a line is edited and re-approved, each
+        approval appears as a separate row with the quantities and resolution recorded at that time.
       </Typography.Paragraph>
 
       {shortfalls.length > 0 && (

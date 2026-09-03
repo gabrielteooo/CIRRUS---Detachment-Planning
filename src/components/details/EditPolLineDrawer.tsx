@@ -1,7 +1,13 @@
 import { useEffect } from 'react';
 import { Button, Drawer, Form, Input, InputNumber, Tag, Typography } from 'antd';
 import type { LineStatus, PlanLine } from '../../types/planLine';
-import { formatLineStatus, getDefaultToBringQty, getPolLineStatus } from '../../types/planLine';
+import {
+  clearOfflineApproval,
+  formatLineStatus,
+  getDefaultToBringQty,
+  getPolLineStatus,
+  hasApprovalResolutionChange,
+} from '../../types/planLine';
 
 interface EditPolLineDrawerProps {
   line: PlanLine | null;
@@ -11,7 +17,7 @@ interface EditPolLineDrawerProps {
 }
 
 const STATUS_TAG_COLORS: Record<LineStatus, string> = {
-  Met: 'success',
+  Available: 'success',
   Deviation: 'warning',
   Shortfall: 'error',
 };
@@ -49,15 +55,22 @@ export default function EditPolLineDrawer({
       const nextToBringQty = values.toBringQty ?? line.toBringQty;
       const nextStatus = getPolLineStatus({ ...line, toBringQty: nextToBringQty });
 
-      onSave({
+      let updated: PlanLine = {
         ...line,
         toBringQty: nextToBringQty,
         remarks: values.remarks?.trim() ?? '',
         deviationReason:
           nextStatus === 'Deviation' ? values.deviationReason?.trim() ?? '' : undefined,
         deviationRemarks: undefined,
-        offlineApproval: nextStatus === 'Deviation' ? line.offlineApproval : undefined,
-      });
+      };
+
+      if (line.offlineApproval && hasApprovalResolutionChange(line, updated)) {
+        updated = clearOfflineApproval(updated);
+      } else if (nextStatus !== 'Deviation') {
+        updated = { ...updated, offlineApproval: undefined };
+      }
+
+      onSave(updated);
       onClose();
     } catch {
       // validation failed

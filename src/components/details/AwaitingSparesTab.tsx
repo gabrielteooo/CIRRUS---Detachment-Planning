@@ -11,6 +11,8 @@ import {
   getPlatformVariantColumn,
   getRequiredColumn,
   getToBringColumn,
+  getIssuedColumn,
+  getFulfillmentStatusColumns,
   getAvailableColumn,
   getAvailableColumnLinkRenderer,
   getMrpControllerColumn,
@@ -32,6 +34,7 @@ interface AwaitingSparesTabProps {
   viewOnly: boolean;
   onEditLine: (line: PlanLine) => void;
   onViewInventory: (line: PlanLine) => void;
+  onEditIssued?: (line: PlanLine) => void;
   onViewNsn: (line: PlanLine) => void;
 }
 
@@ -42,6 +45,7 @@ export default function AwaitingSparesTab({
   viewOnly,
   onEditLine,
   onViewInventory,
+  onEditIssued,
   onViewNsn,
 }: AwaitingSparesTabProps) {
   const [columnVisibility, setColumnVisibility] = useState<WorkQueueColumnVisibility>(
@@ -64,6 +68,8 @@ export default function AwaitingSparesTab({
       getAvailableColumn<PlanLine>(getAvailableColumnLinkRenderer(onViewInventory), {
         lines: awaitingSparesLines,
       }),
+      getIssuedColumn<PlanLine>(awaitingSparesLines, onEditIssued),
+      ...getFulfillmentStatusColumns<PlanLine>(),
       {
         title: 'Resolution',
         key: 'resolution',
@@ -94,7 +100,7 @@ export default function AwaitingSparesTab({
   if (awaitingSparesLines.length === 0) {
     return (
       <Empty
-        description="No items awaiting spares — resolve shortfalls with an awaiting spares path to monitor them here."
+        description="No items awaiting supply — resolve shortfalls with an awaiting supply path to monitor them here."
         style={{ padding: '48px 0' }}
       />
     );
@@ -104,7 +110,7 @@ export default function AwaitingSparesTab({
     <div>
       <div className="lseries-table-toolbar">
         <Typography.Paragraph type="secondary" style={{ marginBottom: 0, flex: 1 }}>
-          These lines are fulfilled with an awaiting spares resolution and do not require approval.
+          These lines are fulfilled with an awaiting supply resolution and do not require approval.
           Monitor supply progress here — change the resolution if plans shift.
         </Typography.Paragraph>
         <CustomizeColumnsButton

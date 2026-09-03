@@ -1,10 +1,12 @@
+import { useMemo } from 'react';
 import { Drawer, Table, Tag, Typography } from 'antd';
+import type { ColumnsType } from 'antd/es/table';
+import { getStorageLocationRows, type StorageLocationRow } from '../../data/nsnDrilldownMock';
 import type { PlanLine } from '../../types/planLine';
-import { getGroupAvailableQty, isInterchangeableLine } from '../../types/planLine';
+import { getGroupAvailableQty, isPolLine } from '../../types/planLine';
 import { formatDate } from '../../utils/planUtils';
 import { assessSupply } from '../../utils/supplyAssessment';
 import {
-  TO_BRING_HUG_COLUMN_WIDTH,
   WAREHOUSE_HUG_COLUMN_WIDTH,
   getNumericQtySortFilter,
   withTableHugColumn,
@@ -17,35 +19,43 @@ interface InventoryDrawerProps {
   onClose: () => void;
 }
 
-interface InventoryRow {
-  nsn: string;
-  description: string;
-  availableQty: number;
-  toBringQty: number;
+function getDisplayDescription(line: PlanLine): string {
+  return line.description.replace(/\s*\(interchangeable[^)]*\)/i, '').trim();
 }
 
-function buildInventoryRows(line: PlanLine): InventoryRow[] {
-  if (isInterchangeableLine(line)) {
-    return line.interchangeableMembers!.map((member) => ({
-      nsn: member.nsn,
-      description: member.description,
-      availableQty: member.availableQty,
-      toBringQty: line.toBringAllocation?.find((item) => item.nsn === member.nsn)?.qty ?? 0,
-    }));
+function isLruWarehouseView(line: PlanLine): boolean {
+  return !isPolLine(line) && line.componentCategory !== 'Consumable';
+}
+
+function getInventoryDrawerColumns(
+  line: PlanLine,
+  rows: StorageLocationRow[],
+): ColumnsType<StorageLocationRow> {
+  const qtyColumn = withTableHugColumn(
+    {
+      title: 'Qty',
+      dataIndex: 'qty',
+      align: 'right' as const,
+      ...getNumericQtySortFilter((record) => record.qty, rows),
+    },
+    WAREHOUSE_HUG_COLUMN_WIDTH,
+  );
+
+  if (isLruWarehouseView(line)) {
+    return [
+      { title: 'S/N', dataIndex: 'serialNo', width: 120, ellipsis: true },
+      { title: 'SLOC', dataIndex: 'sloc', width: 80 },
+      { title: 'SLOC Description', dataIndex: 'slocDescription', ellipsis: true },
+      qtyColumn,
+    ];
   }
 
   return [
-    {
-      nsn: line.nsn,
-      description: line.description,
-      availableQty: line.availableQty,
-      toBringQty: line.toBringQty,
-    },
+    { title: 'Batch no.', dataIndex: 'batchNo', width: 120, ellipsis: true },
+    { title: 'SLOC', dataIndex: 'sloc', width: 80 },
+    { title: 'SLOC Description', dataIndex: 'slocDescription', ellipsis: true },
+    qtyColumn,
   ];
-}
-
-function getDisplayDescription(line: PlanLine): string {
-  return line.description.replace(/\s*\(interchangeable[^)]*\)/i, '').trim();
 }
 
 const RECOMMENDATION_COLORS = {
@@ -61,45 +71,20 @@ export default function InventoryDrawer({
   sparesRequiredBy,
   onClose,
 }: InventoryDrawerProps) {
+  const rows = useMemo(() => (line ? getStorageLocationRows(line) : []), [line]);
+  const columns = useMemo(
+    () => (line ? getInventoryDrawerColumns(line, rows) : []),
+    [line, rows],
+  );
+
   if (!line) return null;
 
   const availableQty = getGroupAvailableQty(line);
-  const rows = buildInventoryRows(line);
   const assessment = assessSupply(line, sparesRequiredBy);
   const isConsumable = line.componentCategory === 'Consumable';
 
-  const columns = [
-    {
-      title: 'NSN',
-      dataIndex: 'nsn',
-      width: 120,
-      ellipsis: true,
-    },
-    {
-      title: 'Description',
-      dataIndex: 'description',
-      ellipsis: true,
-    },
-    withTableHugColumn(
-      {
-        title: 'Warehouse',
-        dataIndex: 'availableQty',
-        ...getNumericQtySortFilter((record) => record.availableQty, rows),
-      },
-      WAREHOUSE_HUG_COLUMN_WIDTH,
-    ),
-    withTableHugColumn(
-      {
-        title: 'To-bring',
-        dataIndex: 'toBringQty',
-        ...getNumericQtySortFilter((record) => record.toBringQty, rows),
-      },
-      TO_BRING_HUG_COLUMN_WIDTH,
-    ),
-  ];
-
   return (
-    <Drawer title="Available qty" open={open} onClose={onClose} width={640}>
+    <Drawer title="Available qty" open={open} onClose={onClose} width={680}>
       <div className="inventory-drawer-summary">
         <div className="inventory-drawer-summary-row">
           <div className="inventory-drawer-summary-item">
@@ -136,7 +121,7 @@ export default function InventoryDrawer({
         <Table
           dataSource={rows}
           columns={columns}
-          rowKey="nsn"
+          rowKey="id"
           pagination={false}
           size="small"
           tableLayout="fixed"

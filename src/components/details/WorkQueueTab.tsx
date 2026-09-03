@@ -8,6 +8,8 @@ import {
   getPlatformVariantColumn,
   getRequiredColumn,
   getToBringColumn,
+  getIssuedColumn,
+  getFulfillmentStatusColumns,
   getAvailableColumn,
   getAvailableColumnLinkRenderer,
   getMrpControllerColumn,
@@ -29,6 +31,7 @@ interface WorkQueueTabProps {
   viewOnly: boolean;
   onEditLine: (line: PlanLine) => void;
   onViewInventory: (line: PlanLine) => void;
+  onEditIssued?: (line: PlanLine) => void;
   onViewNsn: (line: PlanLine) => void;
 }
 
@@ -39,6 +42,7 @@ export default function WorkQueueTab({
   viewOnly,
   onEditLine,
   onViewInventory,
+  onEditIssued,
   onViewNsn,
 }: WorkQueueTabProps) {
   const [columnVisibility, setColumnVisibility] = useState<WorkQueueColumnVisibility>(
@@ -63,6 +67,8 @@ export default function WorkQueueTab({
       getAvailableColumn<PlanLine>(getAvailableColumnLinkRenderer(onViewInventory), {
         lines: queueLines,
       }),
+      getIssuedColumn<PlanLine>(queueLines, onEditIssued),
+      ...getFulfillmentStatusColumns<PlanLine>(),
       getSummaryShortfallDeltaColumn<PlanLine>(),
       getSummaryEditColumn<PlanLine>(viewOnly, onEditLine, (line) =>
         isPolLine(line) ? 'Edit' : getLineActionLabel(line),
@@ -89,7 +95,7 @@ export default function WorkQueueTab({
   if (queueLines.length === 0) {
     return (
       <Empty
-        description="No items require action — all shortfalls and deviations have been recorded."
+        description="No items require action — unresolved shortfalls need a resolution recorded."
         style={{ padding: '48px 0' }}
       />
     );
@@ -99,7 +105,7 @@ export default function WorkQueueTab({
     <div>
       <div className="lseries-table-toolbar">
         <Typography.Paragraph type="secondary" style={{ marginBottom: 0, flex: 1 }}>
-          These items require your action. Record a resolution — awaiting spares is fulfilled
+          These items have unresolved shortfalls. Record a resolution — awaiting supply is fulfilled
           without approval; accept shortfall and cannibalise move to the Approval pack.
         </Typography.Paragraph>
         <CustomizeColumnsButton

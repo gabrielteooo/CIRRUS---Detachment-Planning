@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Button, Card, Input, Popconfirm, Select, Space, Table, Typography } from 'antd';
 import { PlusOutlined, SearchOutlined } from '@ant-design/icons';
-import type { ComponentCategory, LineStatus, PlanLine } from '../../types/planLine';
+import type { ComponentCategory, FulfillmentFilter, LineStatus, PlanLine } from '../../types/planLine';
 import {
   getCategoryFulfillmentSummary,
   getLineActionLabel,
   getLineStatuses,
+  lineMatchesFulfillmentFilter,
 } from '../../types/planLine';
-import LineStatusTags from './LineStatusTags';
 import type { Platform } from '../../types/detachment';
 import { COMPONENT_CATEGORIES } from '../../data/lSeriesTemplate';
 import {
@@ -20,7 +20,6 @@ import {
   computeOperationalTableScrollX,
   computePolTableScrollX,
   ACTION_COLUMN_WIDTH,
-  STATUS_COLUMN_WIDTH,
   DETACHMENT_TABLE_LAYOUT,
   type ComponentTableColumnOptions,
 } from './nsnTableColumns';
@@ -36,6 +35,7 @@ interface LSeriesTableProps {
   viewOnly: boolean;
   onEditLine: (line: PlanLine) => void;
   onViewInventory: (line: PlanLine) => void;
+  onEditIssued?: (line: PlanLine) => void;
   onViewNsn?: (line: PlanLine) => void;
   onAddNsn?: () => void;
   onDeleteLine?: (line: PlanLine) => void;
@@ -65,6 +65,7 @@ export default function LSeriesTable({
   viewOnly,
   onEditLine,
   onViewInventory,
+  onEditIssued,
   onViewNsn,
   onAddNsn,
   onDeleteLine,
@@ -72,6 +73,7 @@ export default function LSeriesTable({
   const [activeCategory, setActiveCategory] = useState<ComponentCategory>('LRU');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [fulfillmentFilter, setFulfillmentFilter] = useState<FulfillmentFilter>('all');
   const [page, setPage] = useState(1);
   const [columnVisibility, setColumnVisibility] = useState<ComponentColumnVisibility>(
     DEFAULT_COMPONENT_COLUMN_VISIBILITY,
@@ -87,7 +89,7 @@ export default function LSeriesTable({
 
   useEffect(() => {
     setPage(1);
-  }, [addedCount, activeCategory, search, statusFilter]);
+  }, [addedCount, activeCategory, search, statusFilter, fulfillmentFilter]);
 
   const sortedLines = useMemo(() => sortLinesForDisplay(lines), [lines]);
 
@@ -113,8 +115,11 @@ export default function LSeriesTable({
         getLineStatuses(line).includes(statusFilter as LineStatus),
       );
     }
+    if (fulfillmentFilter !== 'all') {
+      result = result.filter((line) => lineMatchesFulfillmentFilter(line, fulfillmentFilter));
+    }
     return result;
-  }, [categoryLines, statusFilter]);
+  }, [categoryLines, statusFilter, fulfillmentFilter]);
 
   const tableColumnOptions = useMemo<ComponentTableColumnOptions>(
     () => ({
@@ -125,45 +130,37 @@ export default function LSeriesTable({
     [categoryLines, planVariants, getApplicableVariants],
   );
 
-  const statusAndActionColumns = [
-    {
-      title: 'Status',
-      key: 'status',
-      width: STATUS_COLUMN_WIDTH,
-      render: (_: unknown, record: PlanLine) => <LineStatusTags line={record} />,
-    },
-    {
-      title: 'Action',
-      key: 'action',
-      width: ACTION_COLUMN_WIDTH,
-      fixed: 'right' as const,
-      render: (_: unknown, record: PlanLine) => {
-        if (viewOnly) return null;
+  const actionColumn = {
+    title: 'Action',
+    key: 'action',
+    width: ACTION_COLUMN_WIDTH,
+    fixed: 'right' as const,
+    render: (_: unknown, record: PlanLine) => {
+      if (viewOnly) return null;
 
-        const actionLabel = getLineActionLabel(record);
+      const actionLabel = getLineActionLabel(record);
 
-        return (
-          <Space size={4} wrap>
-            <Button type="link" size="small" onClick={() => onEditLine(record)}>
-              {actionLabel}
-            </Button>
-            {record.isAddedNsn && onDeleteLine && (
-              <Popconfirm
-                title="Remove this NSN from the plan?"
-                okText="Delete"
-                cancelText="Cancel"
-                onConfirm={() => onDeleteLine(record)}
-              >
-                <Button type="link" size="small" danger>
-                  Delete
-                </Button>
-              </Popconfirm>
-            )}
-          </Space>
-        );
-      },
+      return (
+        <Space size={4} wrap>
+          <Button type="link" size="small" onClick={() => onEditLine(record)}>
+            {actionLabel}
+          </Button>
+          {record.isAddedNsn && onDeleteLine && (
+            <Popconfirm
+              title="Remove this NSN from the plan?"
+              okText="Delete"
+              cancelText="Cancel"
+              onConfirm={() => onDeleteLine(record)}
+            >
+              <Button type="link" size="small" danger>
+                Delete
+              </Button>
+            </Popconfirm>
+          )}
+        </Space>
+      );
     },
-  ];
+  };
 
   const activeColumnVisibility = columnVisibility[activeCategory];
 
@@ -186,6 +183,7 @@ export default function LSeriesTable({
         activeColumnVisibility,
         tableColumnOptions,
         onViewNsn,
+        onEditIssued,
       )
     : [];
 
@@ -196,14 +194,15 @@ export default function LSeriesTable({
           variant,
           activeColumnVisibility,
           tableColumnOptions,
+          onViewInventory,
+          onEditIssued,
         ),
-        ...statusAndActionColumns,
+        actionColumn,
       ]
-    : [...operationalColumns, ...statusAndActionColumns];
+    : [...operationalColumns, actionColumn];
 
   const tableScrollX = isPolTab
     ? computePolTableScrollX(activeColumnVisibility, {
-        includeStatus: true,
         includeAction: !viewOnly,
       })
     : computeOperationalTableScrollX(
@@ -270,9 +269,20 @@ export default function LSeriesTable({
           style={{ width: 140 }}
           options={[
             { label: 'All statuses', value: 'all' },
-            { label: 'Fulfilled', value: 'Met' },
+            { label: 'Available', value: 'Available' },
             { label: 'Deviation', value: 'Deviation' },
             { label: 'Shortfall', value: 'Shortfall' },
+          ]}
+        />
+        <Select
+          value={fulfillmentFilter}
+          onChange={(value) => setFulfillmentFilter(value as FulfillmentFilter)}
+          style={{ width: 168 }}
+          options={[
+            { label: 'All fulfillment', value: 'all' },
+            { label: 'Not issued', value: 'none' },
+            { label: 'Partially fulfilled', value: 'Partially fulfilled' },
+            { label: 'Fulfilled', value: 'Fulfilled' },
           ]}
         />
         <CustomizeColumnsButton

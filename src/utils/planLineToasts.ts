@@ -24,7 +24,7 @@ function showDarkSuccess(messageApi: MessageInstance, content: string) {
 export function showAwaitingSparesToast(messageApi: MessageInstance, nsn: string) {
   showDarkSuccess(
     messageApi,
-    `Awaiting spares recorded. ${nsn} is fulfilled — monitor progress in Awaiting spares`,
+    `Awaiting supply recorded. ${nsn} is fulfilled — monitor progress in Awaiting supply`,
   );
 }
 
