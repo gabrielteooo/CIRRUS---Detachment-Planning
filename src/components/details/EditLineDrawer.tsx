@@ -33,13 +33,11 @@ import {
   canDeviateQty,
   clearOfflineApproval,
   getGroupAvailableQty,
-  getPrimaryMemberNsn,
   getShortfallQty,
   hasApprovalResolutionChange,
   hasDeviationCondition,
   hasShortfallCondition,
   isLineFulfilled,
-  isInterchangeableLine,
 } from '../../types/planLine';
 import LineStatusTags from './LineStatusTags';
 interface EditLineDrawerProps {
@@ -64,7 +62,6 @@ function buildShortfallActionsFromForm(
   line: PlanLine,
   values: {
     shortfallActionTypes?: ShortfallActionType[];
-    shortfallTargetNsn?: string;
     acceptQty?: number;
     acceptRemarks?: string;
     waitEntries?: WaitEntryFormValue[];
@@ -75,7 +72,6 @@ function buildShortfallActionsFromForm(
   planNeedByDate: string,
 ): ShortfallAction[] {
   const actionTypes = values.shortfallActionTypes ?? [];
-  const shortfallTargetNsn = values.shortfallTargetNsn;
   const actions: ShortfallAction[] = [];
 
   if (actionTypes.includes('accept')) {
@@ -85,7 +81,6 @@ function buildShortfallActionsFromForm(
       qty: values.acceptQty ?? 1,
       remarks: values.acceptRemarks ?? '',
       approved: existing?.approved ?? false,
-      targetNsn: shortfallTargetNsn,
     });
   }
 
@@ -104,7 +99,6 @@ function buildShortfallActionsFromForm(
         remarks: values.waitRemarks ?? '',
         needByDate: selectedOrder?.edd ?? planNeedByDate,
         approved: existingWait[index]?.approved ?? false,
-        targetNsn: shortfallTargetNsn,
         supplyOrders: selectedOrder
           ? [
               {
@@ -132,7 +126,6 @@ function buildShortfallActionsFromForm(
         workCentreComments: values.cannComments ?? '',
         confirmedWithWorkCentre: true,
         approved: existingCann[index]?.approved ?? false,
-        targetNsn: shortfallTargetNsn,
       });
     }
   }
@@ -297,14 +290,7 @@ export default function EditLineDrawer({
 
       form.setFieldsValue({
         toBringQty: line.toBringQty,
-        deviationReason: line.deviationReason,
-        deviationRemarks: line.deviationRemarks,
-        shortfallTargetNsn:
-          waitActions[0]?.targetNsn ??
-          acceptAction?.targetNsn ??
-          cannActions[0]?.targetNsn ??
-          line.shortfallTargetNsn ??
-          getPrimaryMemberNsn(line),
+        deviationRemarks: line.deviationRemarks ?? line.deviationReason,
         shortfallActionTypes: [...new Set(line.shortfallActions.map((a) => a.type))],
         acceptQty: acceptAction?.qty ?? defaultQty,
         acceptRemarks: acceptAction?.type === 'accept' ? acceptAction.remarks : '',
@@ -354,7 +340,6 @@ export default function EditLineDrawer({
 
   if (!line) return null;
 
-  const isGroup = isInterchangeableLine(line);
   const groupAvailable = getGroupAvailableQty(line);
   const currentToBringResolved = toBringQty ?? line.toBringQty;
   const linePreview = previewLine(line, currentToBringResolved);
@@ -382,7 +367,6 @@ export default function EditLineDrawer({
     try {
       const values = await form.validateFields();
       const actionTypes: ShortfallActionType[] = values.shortfallActionTypes ?? [];
-      const shortfallTargetNsn = values.shortfallTargetNsn as string | undefined;
       const nextToBringQty = values.toBringQty ?? line.toBringQty;
       const savedPreview = previewLine(line, nextToBringQty);
       const needsShortfall = hasShortfallCondition(savedPreview);
@@ -437,30 +421,24 @@ export default function EditLineDrawer({
         ? buildShortfallActionsFromForm(line, values, planNeedByDate)
         : [];
 
-      const savedDeviationUp = line.isAddedNsn || nextToBringQty > line.requiredQty;
-      const savedDeviationDown = !line.isAddedNsn && nextToBringQty < line.requiredQty;
-
       const updated: PlanLine = {
         ...line,
         toBringQty: nextToBringQty,
-        shortfallTargetNsn: shortfallTargetNsn ?? line.shortfallTargetNsn,
         shortfallActions,
         deviationApproved: undefined,
       };
 
       if (needsDeviation) {
-        if (savedDeviationUp && !values.deviationReason?.trim()) {
-          message.error('Enter a deviation reason');
+        if (line.isAddedNsn) {
+          // Reason captured when NSN was added to the plan.
+        } else if (!values.deviationRemarks?.trim()) {
+          message.error('Enter deviation remarks');
           return;
         }
-        if (savedDeviationDown && !values.deviationRemarks?.trim()) {
-          message.error('Enter remarks explaining the reduced to-bring qty');
-          return;
-        }
-        updated.deviationReason =
-          savedDeviationUp ? values.deviationReason?.trim() : undefined;
-        updated.deviationRemarks =
-          savedDeviationDown ? values.deviationRemarks?.trim() : undefined;
+        updated.deviationReason = line.isAddedNsn ? line.deviationReason : undefined;
+        updated.deviationRemarks = line.isAddedNsn
+          ? undefined
+          : values.deviationRemarks?.trim();
       } else {
         updated.deviationReason = undefined;
         updated.deviationRemarks = undefined;
@@ -544,28 +522,15 @@ export default function EditLineDrawer({
           </div>
         </div>
 
-        {deviationUp && (
-          <Form.Item
-            name="deviationReason"
-            label="Reason"
-            rules={[{ required: true, message: 'Enter a deviation reason' }]}
-          >
-            <Input.TextArea
-              rows={3}
-              placeholder="Describe why to-bring qty exceeds the L-series requirement"
-            />
-          </Form.Item>
-        )}
-
-        {deviationDown && (
+        {(deviationUp || deviationDown) && !line.isAddedNsn && (
           <Form.Item
             name="deviationRemarks"
             label="Remarks"
-            rules={[{ required: true, message: 'Enter remarks for the reduced to-bring qty' }]}
+            rules={[{ required: true, message: 'Enter deviation remarks' }]}
           >
             <Input.TextArea
               rows={3}
-              placeholder="Explain why you are bringing less than the L-series requirement"
+              placeholder="Explain why to-bring differs from the L-series requirement"
             />
           </Form.Item>
         )}
@@ -586,30 +551,6 @@ export default function EditLineDrawer({
               <Typography.Text strong>{shortfallQty}</Typography.Text>
               {showDeviationFields ? ' and record the deviation below.' : ' before proceeding.'}
             </Typography.Text>
-
-            {isGroup && (
-              <Form.Item
-                name="shortfallTargetNsn"
-                label="Top up which NSN?"
-                dependencies={['shortfallActionTypes']}
-                rules={[
-                  ({ getFieldValue }) => ({
-                    validator: (_, value) => {
-                      const types = getFieldValue('shortfallActionTypes') ?? [];
-                      if (types.length === 0 || value) return Promise.resolve();
-                      return Promise.reject(new Error('Select NSN to top up'));
-                    },
-                  }),
-                ]}
-              >
-                <Select
-                  options={line.interchangeableMembers!.map((member) => ({
-                    value: member.nsn,
-                    label: `${member.nsn} — ${member.availableQty} avail`,
-                  }))}
-                />
-              </Form.Item>
-            )}
 
             <Form.Item name="shortfallActionTypes">
               <Checkbox.Group className="shortfall-action-checkboxes">

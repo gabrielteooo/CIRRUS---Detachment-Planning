@@ -36,7 +36,7 @@ export default function EditPolLineDrawer({
       form.setFieldsValue({
         toBringQty: line.toBringQty ?? getDefaultToBringQty(line.requiredQty),
         remarks: line.remarks ?? '',
-        deviationReason: line.deviationReason ?? '',
+        deviationRemarks: line.deviationRemarks ?? '',
       });
     }
   }, [line, open, form]);
@@ -47,7 +47,7 @@ export default function EditPolLineDrawer({
     ...line,
     toBringQty: toBringQty ?? line.toBringQty,
   });
-  const showDeviationReason = previewStatus === 'Deviation';
+  const showDeviationRemarks = previewStatus === 'Deviation';
 
   const handleSave = async () => {
     try {
@@ -59,9 +59,9 @@ export default function EditPolLineDrawer({
         ...line,
         toBringQty: nextToBringQty,
         remarks: values.remarks?.trim() ?? '',
-        deviationReason:
-          nextStatus === 'Deviation' ? values.deviationReason?.trim() ?? '' : undefined,
-        deviationRemarks: undefined,
+        deviationRemarks:
+          nextStatus === 'Deviation' ? values.deviationRemarks?.trim() ?? '' : undefined,
+        deviationReason: undefined,
       };
 
       if (line.offlineApproval && hasApprovalResolutionChange(line, updated)) {
@@ -97,7 +97,8 @@ export default function EditPolLineDrawer({
       }
     >
       <Typography.Paragraph type="secondary" style={{ marginBottom: 16 }}>
-        Set to-bring to match required for fulfilment. Less is a shortfall; more is a deviation.
+        Set to-bring qty. Shortfall when warehouse stock is insufficient; deviation when to-bring differs
+        from required.
       </Typography.Paragraph>
 
       <Tag color={STATUS_TAG_COLORS[previewStatus]} className="edit-line-status-tag">
@@ -129,13 +130,13 @@ export default function EditPolLineDrawer({
           <InputNumber min={0} style={{ width: '100%' }} />
         </Form.Item>
 
-        {showDeviationReason && (
+        {showDeviationRemarks && (
           <Form.Item
-            name="deviationReason"
-            label="Deviation reason"
-            rules={[{ required: true, message: 'Enter a reason for bringing extra qty' }]}
+            name="deviationRemarks"
+            label="Deviation remarks"
+            rules={[{ required: true, message: 'Enter deviation remarks' }]}
           >
-            <Input.TextArea rows={3} placeholder="Why is to-bring above the required qty?" />
+            <Input.TextArea rows={3} placeholder="Explain why to-bring differs from required qty" />
           </Form.Item>
         )}
 

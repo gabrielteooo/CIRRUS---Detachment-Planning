@@ -50,15 +50,8 @@ export default function PlanListPage() {
 
       if (tab === 'open') {
         if (isPast) return false;
-      } else {
-        if (!isPast) return false;
-        if (isDirector) {
-          return detachmentPlans.length > 0 && detachmentPlans.every((p) => p.status === 'Approved');
-        }
-        const pastPlan = detachmentPlans.find(
-          (p) => p.platform === plannerPlatform && p.status === 'Approved',
-        );
-        return !!pastPlan;
+      } else if (!isPast) {
+        return false;
       }
 
       if (isDirector) return true;

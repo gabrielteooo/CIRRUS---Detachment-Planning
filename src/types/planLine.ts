@@ -192,9 +192,34 @@ export function getDisplayIssuedQty(line: PlanLine): number {
 
 export function syncLineIssuance(line: PlanLine): PlanLine {
   if (isAutoIssuedLine(line)) {
-    return { ...line, issuedQty: line.toBringQty };
+    return applyIssuanceToLine(line, line.toBringQty);
   }
   return line;
+}
+
+/** SD goods issue — reduce warehouse qty as issued qty increases. */
+export function applyIssuanceToLine(line: PlanLine, nextIssuedQty: number): PlanLine {
+  const prevIssued = getIssuedQty(line);
+  const issueDelta = Math.max(0, nextIssuedQty - prevIssued);
+
+  if (issueDelta === 0) {
+    return { ...line, issuedQty: nextIssuedQty };
+  }
+
+  let remaining = issueDelta;
+  const inventory = line.inventory.map((item) => {
+    if (remaining <= 0) return item;
+    const take = Math.min(item.qty, remaining);
+    remaining -= take;
+    return { ...item, qty: item.qty - take };
+  });
+
+  return {
+    ...line,
+    issuedQty: nextIssuedQty,
+    availableQty: Math.max(0, line.availableQty - issueDelta),
+    inventory,
+  };
 }
 
 export function syncPlanLinesIssuance(lines: PlanLine[]): PlanLine[] {
@@ -233,8 +258,8 @@ export function getOperationalLines(lines: PlanLine[]): PlanLine[] {
 }
 
 export function getPolLineStatus(line: PlanLine): LineStatus {
-  if (line.toBringQty < line.requiredQty) return 'Shortfall';
-  if (line.toBringQty > line.requiredQty) return 'Deviation';
+  if (hasShortfallCondition(line)) return 'Shortfall';
+  if (line.toBringQty !== line.requiredQty) return 'Deviation';
   return 'Available';
 }
 
@@ -243,15 +268,11 @@ export function getDefaultToBringQty(requiredQty: number): number {
 }
 
 export function getGroupAvailableQty(line: PlanLine): number {
-  if (isInterchangeableLine(line)) {
-    return line.interchangeableMembers!.reduce((sum, member) => sum + member.availableQty, 0);
-  }
   return line.availableQty;
 }
 
-/** To-bring exceeds available stock. */
+/** To-bring exceeds available stock (same rule for LRU, Consumable, and POL). */
 export function hasShortfallCondition(line: PlanLine): boolean {
-  if (isPolLine(line)) return line.toBringQty < line.requiredQty;
   if (isAsRequiredLine(line) && line.toBringQty <= 0) return false;
   return line.toBringQty > getGroupAvailableQty(line);
 }
@@ -291,7 +312,7 @@ export function canAcceptShortfall(line: PlanLine): boolean {
 /** To-bring differs from the L-series requirement (or line was added to the plan). */
 export function hasDeviationCondition(line: PlanLine): boolean {
   if (isAsRequiredLine(line)) return false;
-  if (isPolLine(line)) return line.toBringQty > line.requiredQty;
+  if (isPolLine(line)) return line.toBringQty !== line.requiredQty;
   return line.isAddedNsn || line.toBringQty !== line.requiredQty;
 }
 
@@ -352,9 +373,6 @@ export function getLineStatus(line: PlanLine): LineStatus {
 }
 
 export function getShortfallQty(line: PlanLine): number {
-  if (isPolLine(line)) {
-    return Math.max(0, line.requiredQty - line.toBringQty);
-  }
   const available = getGroupAvailableQty(line);
   if (line.toBringQty > available) {
     return line.toBringQty - available;
@@ -362,12 +380,12 @@ export function getShortfallQty(line: PlanLine): number {
   return 0;
 }
 
-/** Surplus vs required when fulfilled; negative gap (e.g. -1) when to-bring exceeds available. */
+/** Surplus vs required when fulfilled; negative gap when to-bring exceeds available. */
 export function getShortfallDelta(line: PlanLine): number {
-  if (isPolLine(line)) return line.toBringQty - line.requiredQty;
   if (hasShortfallCondition(line)) {
     return getGroupAvailableQty(line) - line.toBringQty;
   }
+  if (isPolLine(line)) return line.toBringQty - line.requiredQty;
   return getGroupAvailableQty(line) - line.requiredQty;
 }
 
@@ -549,6 +567,43 @@ export function getAcceptShortfallEntries(lines: PlanLine[]): AcceptShortfallEnt
   return entries;
 }
 
+export type OcApprovalReason = 'low-stock' | 'full-commit';
+
+export interface PendingOcApprovalEntry {
+  line: PlanLine;
+}
+
+export function getOcApprovalReason(line: PlanLine): OcApprovalReason | null {
+  if (!needsOcApprovalForIssue(line)) return null;
+  const warehouse = getGroupAvailableQty(line);
+  if (warehouse === line.toBringQty) return 'full-commit';
+  if (warehouse <= 2) return 'low-stock';
+  return null;
+}
+
+/** Lines needing informal OC approval before SD issue (warehouse ≤ 2 or warehouse = to-bring). */
+export function getPendingOcApprovalEntries(lines: PlanLine[]): PendingOcApprovalEntry[] {
+  const entries: PendingOcApprovalEntry[] = [];
+
+  for (const line of lines) {
+    if (!lineNeedsOcApproval(line)) continue;
+    if (getFulfillmentStatus(line) === 'Fulfilled') continue;
+
+    const reason = getOcApprovalReason(line);
+    if (!reason) continue;
+
+    entries.push({ line });
+  }
+
+  return entries.sort(
+    (a, b) => getGroupAvailableQty(a.line) - getGroupAvailableQty(b.line),
+  );
+}
+
+export function countPendingOcApprovalLines(lines: PlanLine[]): number {
+  return getPendingOcApprovalEntries(lines).length;
+}
+
 export function countShortfalls(lines: PlanLine[]): number {
   return getOperationalLines(lines).filter((l) => hasShortfallCondition(l)).length;
 }
@@ -592,14 +647,17 @@ export function countAircraftCannibalised(lines: PlanLine[]): number {
 }
 
 export function computePlanStatus(lines: PlanLine[]): 'Draft' | 'Partially Approved' | 'Approved' {
-  const needsApproval = lines.filter(lineNeedsApproval);
+  const queueCount = countWorkQueueLines(lines);
+  const packCount = countApprovalPackLines(lines);
 
-  if (needsApproval.length === 0) return 'Draft';
+  if (queueCount === 0 && packCount === 0) {
+    return 'Approved';
+  }
 
-  const { approved, total } = computeApprovalProgress(lines);
+  const needingApproval = lines.filter(lineNeedsApproval);
+  const approvedCount = needingApproval.filter(isLineApprovalComplete).length;
 
-  if (approved === total) return 'Approved';
-  if (approved > 0) return 'Partially Approved';
+  if (approvedCount > 0 || packCount > 0) return 'Partially Approved';
   return 'Draft';
 }
 
@@ -662,29 +720,30 @@ export function isShortfallUnresolved(line: PlanLine): boolean {
 export function hasDeviationResolutionRecorded(line: PlanLine): boolean {
   if (!hasDeviationCondition(line)) return true;
   if (line.isAddedNsn) return !!(line.deviationReason?.trim());
-  if (line.toBringQty > line.requiredQty) return !!(line.deviationReason?.trim());
-  if (line.toBringQty < line.requiredQty) return !!(line.deviationRemarks?.trim());
+  if (line.toBringQty !== line.requiredQty) {
+    return !!(line.deviationRemarks?.trim());
+  }
   return false;
 }
 
 export function isDeviationUnresolved(line: PlanLine): boolean {
   if (!hasDeviationCondition(line)) return false;
   if (isPolLine(line)) {
-    return getPolLineStatus(line) === 'Deviation' && !line.deviationReason?.trim();
+    return getPolLineStatus(line) === 'Deviation' && !line.deviationRemarks?.trim();
   }
   return !hasDeviationResolutionRecorded(line);
 }
 
 /**
- * Action required = unresolved stock shortfall on L-series-aligned lines only.
- * Deviations (to-bring ≠ required) are resolved via Edit/Deviate on All components,
- * not the work queue — even when the deviation creates a warehouse gap.
+ * Action required = unresolved stock shortfall.
+ * Includes L-series-aligned and upward-deviation shortfalls; excludes downward deviation and add-NSN.
  */
 export function isActionRequired(line: PlanLine): boolean {
   if (!isShortfallUnresolved(line)) return false;
   if (isPolLine(line)) return true;
   if (isAsRequiredLine(line)) return line.toBringQty > 0;
-  return line.toBringQty === line.requiredQty && !line.isAddedNsn;
+  if (line.isAddedNsn) return false;
+  return line.toBringQty >= line.requiredQty;
 }
 
 export function isInterchangeableLine(line: PlanLine): boolean {
@@ -725,7 +784,7 @@ export function hasShortfallResolutionRecorded(line: PlanLine): boolean {
 export function hasResolutionRecorded(line: PlanLine): boolean {
   if (isPolLine(line)) {
     const status = getPolLineStatus(line);
-    if (status === 'Deviation') return !!(line.deviationReason?.trim());
+    if (status === 'Deviation') return !!(line.deviationRemarks?.trim());
     return status === 'Available';
   }
   return hasShortfallResolutionRecorded(line) && hasDeviationResolutionRecorded(line);
@@ -733,7 +792,7 @@ export function hasResolutionRecorded(line: PlanLine): boolean {
 
 export function getLineActionLabel(line: PlanLine): 'Resolve' | 'Edit' | 'Deviate' {
   if (isPolLine(line)) {
-    if (getPolLineStatus(line) === 'Deviation' && !line.deviationReason?.trim()) {
+    if (getPolLineStatus(line) === 'Deviation' && !line.deviationRemarks?.trim()) {
       return 'Deviate';
     }
     return 'Edit';
@@ -1036,10 +1095,8 @@ export function countWorkQueueLines(lines: PlanLine[]): number {
 }
 
 export function formatDeviationResolution(line: PlanLine): string {
-  if (line.isAddedNsn || line.toBringQty > line.requiredQty) {
-    return line.deviationReason?.trim() || '—';
-  }
-  if (line.toBringQty < line.requiredQty) {
+  if (line.isAddedNsn) return line.deviationReason?.trim() || '—';
+  if (line.toBringQty !== line.requiredQty) {
     return line.deviationRemarks?.trim() || '—';
   }
   return '—';

@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Drawer, Table, Tag, Typography } from 'antd';
+import { Empty, Drawer, Table, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { getStorageLocationRows, type StorageLocationRow } from '../../data/nsnDrilldownMock';
 import type { PlanLine } from '../../types/planLine';
@@ -118,14 +118,18 @@ export default function InventoryDrawer({
       </div>
 
       <div className="inventory-drawer-table" style={{ marginTop: 16 }}>
-        <Table
-          dataSource={rows}
-          columns={columns}
-          rowKey="id"
-          pagination={false}
-          size="small"
-          tableLayout="fixed"
-        />
+        {rows.length === 0 ? (
+          <Empty description="No warehouse stock at SLOC" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+        ) : (
+          <Table
+            dataSource={rows}
+            columns={columns}
+            rowKey="id"
+            pagination={false}
+            size="small"
+            tableLayout="fixed"
+          />
+        )}
       </div>
 
       <section className="inventory-drawer-supply-assessment">

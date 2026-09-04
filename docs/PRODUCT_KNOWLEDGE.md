@@ -38,16 +38,26 @@ Use this document as agent context when building or extending the Detachment Pla
 
 ## 3. To-be process
 
+**Typical planner workflow after creating a detachment plan:**
+
+1. Adjust the plan — edit to-bring on existing lines or **Add NSN** (always a deviation).
+2. **Resolve shortfalls** — Action required tab; record wait / accept / cannibalise.
+3. **OC approval** — informal; planners often filter LRU lines with warehouse qty **1 or 2**, present to OC, then call Supply Depot (SD) after approval.
+4. **Call SD** — move spares from warehouse SLOC to detachment plan SLOC (goods issue in ES).
+5. **Monitor** fulfilment and awaiting spares.
+6. **Present to CO** — shortfalls (accept / cannibalise) and deviations for offline sign-off; record in Approval pack.
+
 ```
 Create Detachment
   → Insert parameters (platform, variant, L-series, flying hours / aircraft count, dates)
   → Generate detachment plan (L-series lines + warehouse overlay from ES)
-  → Identify shortfall (to-bring > warehouse)
-  → Indicate deviation (to-bring qty ≠ required qty)
-  → Reserve spares (ES) when warehouse > to-bring
-  → Present to approving officer offline (deviation, shortfall, low-stock / full-commit lines)
-  → Record approval in app
-  → ES goods issue → CIRRUS reflects Partially fulfilled / Fulfilled
+  → Adjust to-bring / add NSNs
+  → Resolve shortfalls (Action required)
+  → OC approval for low-stock LRU (informal; WH 1–2)
+  → SD moves stock (warehouse SLOC → detachment SLOC)
+  → Monitor fulfilment + awaiting spares
+  → Present accept / cannibalise + deviations to CO (Approval pack)
+  → Record approval snapshots in app
 ```
 
 **Digital scope:** Steps through recording approval happen in-app. Presenting and getting sign-off happen **offline** (meeting). There is **no automated approver workflow** in v1 — planner checks “offline approval recorded” after the meeting.
@@ -148,9 +158,13 @@ Inventory drawer: show SLOC code, description, qty, and serviceability per row.
 
 ### 6.3 Planning status (CIRRUS-owned)
 
+**Available** means serviceable stock exists in the **warehouse SLOC pool** for that NSN (shared base stock). It does **not** mean the detachment has received the spares.
+
+**Fulfilled** (fulfillment axis) means SD/ES has **goods-issued** stock to the detachment plan line (`issuedQty >= toBringQty`). When issued, **warehouse qty decreases** (e.g. required 2, warehouse 3, issued 0 → after SD move: warehouse 1, issued 2).
+
 Derived from planner input + synced warehouse qty.
 
-**Standard lines** (`requiredQty > 0`):
+**Standard lines** (`requiredQty > 0`, not user-added):
 
 ```
 if toBringQty > warehouseQty     → Shortfall
@@ -158,13 +172,11 @@ else if toBringQty ≠ requiredQty → Deviation
 else                             → Available
 ```
 
-**Optional “As required” lines** (`requiredQty = 0`) — see §6.8: no **Deviation** from a zero baseline; evaluate Shortfall only when planner has set `toBringQty > 0`.
+**POL** uses the same shortfall rule as LRU/Consumable (`toBring > warehouse`), not `toBring < required`.
 
-Shortfall and Deviation may coexist on one line (standard lines only for Deviation).
+**Optional “As required” lines** (`requiredQty = 0`) — see §6.8: no **Deviation**; shortfall only when `toBringQty > 0` and `toBringQty > warehouseQty`.
 
-**Shortfall gap** = `max(0, toBringQty - warehouseQty)`.
-
-**Fill rate (planning)** = percentage of lines in **Available** planning status (excluding unresolved Shortfall / Deviation), unless a KPI is explicitly logistics-based. **Exclude optional “As required” lines** from fill-rate numerator and denominator — they never affect fill rate, whether or not the planner opts to bring them.
+**Fill rate** = **fulfillment** fill rate: % of eligible lines with **Fulfilled** status. Computed **per category** (LRU, Consumables, POL) and **overall** = average of the three category rates. Exclude as-required lines entirely.
 
 ### 6.4 Fulfillment status (ES-fed, CIRRUS-derived)
 
@@ -182,26 +194,38 @@ Display **planning status** and **fulfillment status** as separate tags when bot
 
 ### 6.5 Reservation and OC approval
 
-Not all warehouse qty is issued to the detachment. Planners must:
+When warehouse exceeds to-bring, ES **reserves** stock (prototype may auto-issue for demo). Planners seek **informal OC approval** for LRU lines with warehouse qty **1 or 2** (or when warehouse equals to-bring — full pool commit). No separate resolution step before OC — present and record after meeting. After OC approval, planner calls **SD** to move spares.
 
-| Condition | Planner action |
-|-----------|----------------|
-| **Warehouse > To-bring** | **Reserve** the to-bring qty (in ES; displayed in CIRRUS when synced) |
-| **Warehouse ≤ 2** | Seek **OC approval** (offline); record in CIRRUS |
-| **Warehouse = To-bring exactly** | Seek **OC approval** (offline) — commits entire visible pool for that NSN |
+### 6.5.1 Action required (work queue)
 
-OC approval for low-stock / full-commit lines is **in addition to** deviation and shortfall (accept / cannibalise) approvals where those apply.
+Unresolved **shortfalls** only — lines where `toBring > warehouse` and no resolution recorded. Includes:
+
+- L-series-aligned shortfalls (`toBring = required`)
+- **Upward deviation** shortfalls (`toBring > required`)
+
+Excludes downward deviation shortfalls and **Add NSN** lines (deviation workflow on All components).
+
+### 6.5.2 Plan approval status
+
+| Status | Rule |
+|--------|------|
+| **Approved** | No lines in Action required **and** no lines pending in Approval pack |
+| **Partially Approved** | Some approvals recorded or items still in Approval pack |
+| **Draft** | Work in progress |
+
+**Past detachment** = detachment **end date** has passed (not “Approved” status).
 
 ### 6.6 Deviation
 
 Triggered when **to-bring qty ≠ required qty** on **standard lines** (`requiredQty > 0`). Does **not** apply to optional “As required” lines (§6.8).
 
-| Reason (enum) | When |
-|---------------|------|
-| Exercise needs | Operational adjustment |
-| Accepting risk due to shortfall | Qty change tied to shortfall acceptance |
+Requires **remarks** (upward and downward) + **offline approval** for standard deviations.
 
-Requires remarks + **offline approval recorded** in CIRRUS.
+**Add NSN** — reason captured at add time; always **Deviation** (not as-required).
+
+**Accept shortfall** — line remains **Shortfall** in planning status even after CO approval.
+
+**Interchangeable groups** — one plan line per group with **combined warehouse qty**; no per-member NSN top-up selection.
 
 ### 6.7 Shortfall resolution (multi-select)
 
@@ -362,6 +386,8 @@ FMS App Shell
 
 **KPI strip:**
 - Total lines · Shortfalls · Deviations · Cannibalisation lines · Fill rate %
+- **Low volume spares** — count of NSNs with warehouse ≤ 2 or warehouse = to-bring (not shortfall, not fulfilled); **View more** opens NSN list sorted by warehouse ascending (NSN, description, required, to-bring, warehouse, issued, status)
+- **Cannibalised LRU** · **Awaiting Supply** · **Accept Shortfall** — insight cards with drill-down modals
 
 **Shortfall summary (collapse):** Table of shortfall lines only — component, required, warehouse, shortfall qty, actions taken, approval checkbox, Edit link.
 
@@ -478,8 +504,9 @@ See `src/types/detachment.ts` and `src/types/planLine.ts` for full interfaces.
 | Multi-select variant on create | Built |
 | Edit parameters | Stub (“coming soon”) |
 | L-series Management page | Not built |
-| Live ES inventory / issuance feed | Not built (mock snapshot) |
-| Issued qty / fulfillment status from ES | Not built |
+| Live ES inventory / issuance feed | Mock snapshot + manual issued drawer |
+| Issued qty / fulfillment status | Built (mock; warehouse decreases on issue) |
+| Approval snapshots (re-approval history) | Built |
 | Reservation (ES) display in CIRRUS | Not built |
 | Export | UI only |
 | Backend / auth | Not built |
@@ -489,7 +516,17 @@ See `src/types/detachment.ts` and `src/types/planLine.ts` for full interfaces.
 ## 16. Business rules checklist
 
 - [ ] Planner sees **only own** plans; Director sees **all unit** plans read-only.
-- [ ] **Past** tab shows **Approved** plans only; **view-only** everywhere.
+- [ ] **Past** tab = detachments whose **end date** has passed (view-only).
+- [ ] **Plan Approved** = empty Action required + empty Approval pack pending.
+- [ ] **Fill rate** = fulfillment % per category; overall = average of LRU, Consumables, POL.
+- [ ] **Available** = warehouse stock exists; **Fulfilled** = issued to detachment (WH decreases).
+- [ ] **POL shortfall** = same warehouse-gap rule as LRU/Consumable.
+- [ ] **Upward deviation shortfall** appears in Action required.
+- [ ] **Deviation remarks** for both upward and downward qty changes (Add NSN uses reason at add).
+- [ ] **Accept shortfall** stays Shortfall after approval.
+- [ ] **Interchangeable** = combined group qty (no member NSN picker).
+- [ ] **Warehouse drawer** shows no rows when stock is zero.
+- [ ] **Edit parameters** regenerates plan lines (stub).
 - [ ] **Create Detachment** hidden for Director and on Past tab.
 - [ ] **Required** = L-series qty; **To-bring** defaults to required, editable.
 - [ ] **As required** lines have `requiredQty = 0`, show **0** in Required column; optional until planner sets to-bring > 0; never **Deviation**.

@@ -11,6 +11,7 @@ import {
   formatVariantLabels,
 } from '../../utils/planDisplayUtils';
 import {
+  applyIssuanceToLine,
   applyOfflineApprovalToLines,
   countApprovalPackLines,
   countApprovedPackLines,
@@ -108,7 +109,7 @@ export default function PlanDetailsContent({
 
   const handleSaveIssuedQty = (line: PlanLine, issuedQty: number) => {
     const next = lines.map((l) =>
-      l.id === line.id ? syncLineIssuance({ ...l, issuedQty }) : l,
+      l.id === line.id ? syncLineIssuance(applyIssuanceToLine(l, issuedQty)) : l,
     );
     updatePlanLines(planId, syncPlanLinesIssuance(next));
     message.success('Issued qty updated');

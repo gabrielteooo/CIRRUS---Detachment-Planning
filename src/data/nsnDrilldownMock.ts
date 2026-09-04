@@ -130,20 +130,6 @@ function buildStorageRowFromItem(
   };
 }
 
-function buildEmptyStorageRow(line: PlanLine): StorageLocationRow {
-  return {
-    id: `${line.nsn}-storage-0`,
-    serialNo: padSerial(1),
-    batchNo: padBatch(1),
-    sloc: 'SL01',
-    slocDescription: 'WH01-R01-S',
-    equipmentNo: padEquipment(1),
-    qty: 0,
-    stockStatus: 'Warehouse',
-    ...buildStorageRowMetrics(0),
-  };
-}
-
 /** Split consumable / POL stock into batch qtys (typically ≥ 10 per batch). */
 function splitIntoBatchQtys(totalQty: number): number[] {
   if (totalQty <= 0) return [];
@@ -229,14 +215,14 @@ function supplyEddProfile(nsn: string): { repairEddIso: string; newBuyEddIso: st
 
 export function getStorageLocationRows(line: PlanLine): StorageLocationRow[] {
   if (line.inventory.length === 0) {
-    return [buildEmptyStorageRow(line)];
+    return [];
   }
 
   const rows = isLruWarehouseLine(line)
     ? buildLruStorageRows(line)
     : buildBatchStorageRows(line);
 
-  return rows.length > 0 ? rows : [buildEmptyStorageRow(line)];
+  return rows;
 }
 
 export function getOnAircraftRows(line: PlanLine): OnAircraftRow[] {

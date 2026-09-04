@@ -6,11 +6,13 @@ import {
   computeShortfallResolvedProgress,
   getAcceptShortfallEntries,
   getCannibalisedEntries,
+  getPendingOcApprovalEntries,
   getWaitEntries,
 } from '../../types/planLine';
 import { fillRateColor } from '../../data/mockPlans';
 import AcceptShortfallModal from './AcceptShortfallModal';
 import CannibalisedModal from './CannibalisedModal';
+import PendingOcApprovalModal from './PendingOcApprovalModal';
 import WaitModal from './WaitModal';
 
 interface KpiStripProps {
@@ -43,6 +45,7 @@ export default function KpiStrip({ lines }: KpiStripProps) {
   const [cannibalisedModalOpen, setCannibalisedModalOpen] = useState(false);
   const [waitModalOpen, setWaitModalOpen] = useState(false);
   const [acceptShortfallModalOpen, setAcceptShortfallModalOpen] = useState(false);
+  const [pendingOcApprovalModalOpen, setPendingOcApprovalModalOpen] = useState(false);
 
   const fillRate = useMemo(() => computeFillRate(lines), [lines]);
   const { resolved: shortfallsResolved, total: shortfallTotal } =
@@ -50,11 +53,15 @@ export default function KpiStrip({ lines }: KpiStripProps) {
   const cannibalisedEntries = useMemo(() => getCannibalisedEntries(lines), [lines]);
   const waitEntries = useMemo(() => getWaitEntries(lines), [lines]);
   const acceptShortfallEntries = useMemo(() => getAcceptShortfallEntries(lines), [lines]);
+  const pendingOcApprovalEntries = useMemo(
+    () => getPendingOcApprovalEntries(lines),
+    [lines],
+  );
 
   return (
     <>
-      <Row gutter={16} className="kpi-strip">
-        <Col xs={12} sm={6} flex="1 1 0">
+      <Row gutter={[16, 16]} className="kpi-strip">
+        <Col xs={12} sm={8} lg={4} flex="1 1 0">
           <Card className="kpi-card" style={{ height: '100%' }}>
             <Statistic
               title="Fill rate"
@@ -65,7 +72,7 @@ export default function KpiStrip({ lines }: KpiStripProps) {
             />
           </Card>
         </Col>
-        <Col xs={12} sm={6} flex="1 1 0">
+        <Col xs={12} sm={8} lg={4} flex="1 1 0">
           <Card className="kpi-card" style={{ height: '100%' }}>
             <Statistic
               title="Shortfall resolved"
@@ -74,21 +81,28 @@ export default function KpiStrip({ lines }: KpiStripProps) {
             />
           </Card>
         </Col>
-        <Col xs={24} sm={6} flex="1 1 0">
+        <Col xs={12} sm={8} lg={4} flex="1 1 0">
+          <KpiInsightCard
+            title="Low volume spares"
+            count={pendingOcApprovalEntries.length}
+            onViewDetails={() => setPendingOcApprovalModalOpen(true)}
+          />
+        </Col>
+        <Col xs={12} sm={8} lg={4} flex="1 1 0">
           <KpiInsightCard
             title="Cannibalised LRU"
             count={cannibalisedEntries.length}
             onViewDetails={() => setCannibalisedModalOpen(true)}
           />
         </Col>
-        <Col xs={24} sm={12} lg={6} flex="1 1 0">
+        <Col xs={12} sm={8} lg={4} flex="1 1 0">
           <KpiInsightCard
             title="Awaiting Supply"
             count={waitEntries.length}
             onViewDetails={() => setWaitModalOpen(true)}
           />
         </Col>
-        <Col xs={24} sm={12} lg={6} flex="1 1 0">
+        <Col xs={12} sm={8} lg={4} flex="1 1 0">
           <KpiInsightCard
             title="Accept Shortfall"
             count={acceptShortfallEntries.length}
@@ -111,6 +125,11 @@ export default function KpiStrip({ lines }: KpiStripProps) {
         open={acceptShortfallModalOpen}
         entries={acceptShortfallEntries}
         onClose={() => setAcceptShortfallModalOpen(false)}
+      />
+      <PendingOcApprovalModal
+        open={pendingOcApprovalModalOpen}
+        entries={pendingOcApprovalEntries}
+        onClose={() => setPendingOcApprovalModalOpen(false)}
       />
     </>
   );
