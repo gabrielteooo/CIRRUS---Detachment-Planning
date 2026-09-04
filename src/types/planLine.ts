@@ -166,6 +166,21 @@ export function getIssuedQty(line: PlanLine): number {
   return line.issuedQty ?? 0;
 }
 
+/** Manual goods issue — blocked until shortfall resolution is recorded; accept/cannibalise need CO approval. */
+export function isShortfallIssueApproved(line: PlanLine): boolean {
+  if (!hasShortfallCondition(line)) return true;
+  if (line.shortfallActions.length === 0) return false;
+  if (isAwaitingSparesOnlyShortfallResolution(line)) return true;
+  return isLineApprovalComplete(line);
+}
+
+/** Manual goods issue — blocked for unapproved / unresolved shortfalls. */
+export function canIssueLine(line: PlanLine): boolean {
+  if (line.toBringQty <= 0) return false;
+  if (hasShortfallCondition(line)) return isShortfallIssueApproved(line);
+  return true;
+}
+
 /** Warehouse ≤ 2 or warehouse = to-bring — OC approval before manual issue. */
 export function needsOcApprovalForIssue(line: PlanLine): boolean {
   const toBring = line.toBringQty;
@@ -226,8 +241,12 @@ export function syncPlanLinesIssuance(lines: PlanLine[]): PlanLine[] {
   return lines.map(syncLineIssuance);
 }
 
-/** ES-fed fulfillment derived from issued vs to-bring. */
+/** ES-fed fulfillment derived from issued vs to-bring (after shortfall approval when applicable). */
 export function getFulfillmentStatus(line: PlanLine): FulfillmentStatus | null {
+  if (hasShortfallCondition(line) && !isShortfallIssueApproved(line)) {
+    return null;
+  }
+
   const issued = getDisplayIssuedQty(line);
   const { toBringQty } = line;
   if (toBringQty <= 0 && issued <= 0) return null;
@@ -281,7 +300,7 @@ export function hasAwaitingSparesResolution(line: PlanLine): boolean {
   return line.shortfallActions.some((action) => action.type === 'wait');
 }
 
-/** Shortfall resolved only via awaiting supply — fulfilled without approval. */
+/** Shortfall resolved only via awaiting supply — no Approval pack (monitor until stock arrives). */
 export function isAwaitingSparesOnlyShortfallResolution(line: PlanLine): boolean {
   if (!hasShortfallCondition(line)) return false;
   if (line.shortfallActions.length === 0) return false;
@@ -290,7 +309,7 @@ export function isAwaitingSparesOnlyShortfallResolution(line: PlanLine): boolean
 
 export function getAwaitingSparesLines(lines: PlanLine[]): PlanLine[] {
   return getOperationalLines(lines).filter(
-    (line) => hasShortfallCondition(line) && hasAwaitingSparesResolution(line),
+    (line) => hasShortfallCondition(line) && isAwaitingSparesOnlyShortfallResolution(line),
   );
 }
 
@@ -353,10 +372,7 @@ export function getLineStatuses(line: PlanLine): LineStatus[] {
     return status === 'Available' ? ['Available'] : [status];
   }
   const statuses: LineStatus[] = [];
-  if (
-    hasShortfallCondition(line) &&
-    !isAwaitingSparesOnlyShortfallResolution(line)
-  ) {
+  if (hasShortfallCondition(line)) {
     statuses.push('Shortfall');
   }
   if (hasDeviationCondition(line)) statuses.push('Deviation');
@@ -624,10 +640,22 @@ export function hasNonAcceptShortfallResolution(line: PlanLine): boolean {
   );
 }
 
+/**
+ * Lines in the planner shortfall workflow (Action required, Approval pack, Awaiting supply).
+ * Excludes POL, add-NSN, downward-deviation gaps, and uncommitted as-required lines.
+ */
+export function isShortfallWorkflowLine(line: PlanLine): boolean {
+  if (!hasShortfallCondition(line)) return false;
+  if (isPolLine(line)) return false;
+  if (line.isAddedNsn) return false;
+  if (isAsRequiredLine(line)) return line.toBringQty > 0;
+  return line.toBringQty >= line.requiredQty;
+}
+
 export function computeShortfallResolvedProgress(
   lines: PlanLine[],
 ): { resolved: number; total: number } {
-  const shortfallLines = getOperationalLines(lines).filter((l) => hasShortfallCondition(l));
+  const shortfallLines = lines.filter(isShortfallWorkflowLine);
   const resolved = shortfallLines.filter((l) => l.shortfallActions.length > 0).length;
   return { resolved, total: shortfallLines.length };
 }
@@ -735,15 +763,14 @@ export function isDeviationUnresolved(line: PlanLine): boolean {
 }
 
 /**
- * Action required = unresolved stock shortfall.
- * Includes L-series-aligned and upward-deviation shortfalls; excludes downward deviation and add-NSN.
+ * Action required = unresolved stock shortfall in the planner workflow.
+ * Same line set as {@link isShortfallWorkflowLine}; excludes fulfilled lines.
  */
 export function isActionRequired(line: PlanLine): boolean {
+  if (!isShortfallWorkflowLine(line)) return false;
   if (!isShortfallUnresolved(line)) return false;
-  if (isPolLine(line)) return true;
-  if (isAsRequiredLine(line)) return line.toBringQty > 0;
-  if (line.isAddedNsn) return false;
-  return line.toBringQty >= line.requiredQty;
+  if (getFulfillmentStatus(line) === 'Fulfilled') return false;
+  return true;
 }
 
 export function isInterchangeableLine(line: PlanLine): boolean {

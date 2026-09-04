@@ -13,6 +13,7 @@ import {
 import {
   applyIssuanceToLine,
   applyOfflineApprovalToLines,
+  canIssueLine,
   countApprovalPackLines,
   countApprovedPackLines,
   countAwaitingSparesLines,
@@ -48,9 +49,9 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 type PlanTabKey =
+  | 'all-components'
   | 'work-queue'
   | 'awaiting-supply'
-  | 'all-components'
   | 'approval-pack'
   | 'approved';
 
@@ -70,7 +71,7 @@ export default function PlanDetailsContent({
   const planId = plan.id;
   const lines = getPlanLines(planId);
 
-  const [activeTab, setActiveTab] = useState<PlanTabKey>('work-queue');
+  const [activeTab, setActiveTab] = useState<PlanTabKey>('all-components');
   const [inventoryLine, setInventoryLine] = useState<PlanLine | null>(null);
   const [sparesDetailLine, setSparesDetailLine] = useState<PlanLine | null>(null);
   const [editLine, setEditLine] = useState<PlanLine | null>(null);
@@ -108,6 +109,10 @@ export default function PlanDetailsContent({
   };
 
   const handleSaveIssuedQty = (line: PlanLine, issuedQty: number) => {
+    if (!canIssueLine(line)) {
+      message.warning('Cannot issue spares while line is in shortfall');
+      return;
+    }
     const next = lines.map((l) =>
       l.id === line.id ? syncLineIssuance(applyIssuanceToLine(l, issuedQty)) : l,
     );
@@ -119,7 +124,6 @@ export default function PlanDetailsContent({
     const newLines = createAddedPlanLines(planId, entries, deviationReason, plan.platform).reverse();
     updatePlanLines(planId, [...newLines, ...lines]);
     showAddedNsnToast(message);
-    setActiveTab('work-queue');
   };
 
   const handleDeleteLine = (line: PlanLine) => {
@@ -136,6 +140,24 @@ export default function PlanDetailsContent({
 
   const tabItems = [
     {
+      key: 'all-components',
+      label: 'All components',
+      children: (
+        <LSeriesTable
+          lines={lines}
+          platform={plan.platform}
+          variant={variantLabel}
+          viewOnly={viewOnly}
+          onEditLine={openEditLine}
+          onViewInventory={setInventoryLine}
+          onEditIssued={setIssuedLine}
+          onViewNsn={setSparesDetailLine}
+          onAddNsn={() => setAddNsnOpen(true)}
+          onDeleteLine={handleDeleteLine}
+        />
+      ),
+    },
+    {
       key: 'work-queue',
       label: `Action required${workQueueCount > 0 ? ` (${workQueueCount})` : ''}`,
       children: (
@@ -146,7 +168,6 @@ export default function PlanDetailsContent({
           viewOnly={viewOnly}
           onEditLine={openEditLine}
           onViewInventory={setInventoryLine}
-          onEditIssued={setIssuedLine}
           onViewNsn={setSparesDetailLine}
         />
       ),
@@ -164,24 +185,6 @@ export default function PlanDetailsContent({
           onViewInventory={setInventoryLine}
           onEditIssued={setIssuedLine}
           onViewNsn={setSparesDetailLine}
-        />
-      ),
-    },
-    {
-      key: 'all-components',
-      label: 'All components',
-      children: (
-        <LSeriesTable
-          lines={lines}
-          platform={plan.platform}
-          variant={variantLabel}
-          viewOnly={viewOnly}
-          onEditLine={openEditLine}
-          onViewInventory={setInventoryLine}
-          onEditIssued={setIssuedLine}
-          onViewNsn={setSparesDetailLine}
-          onAddNsn={() => setAddNsnOpen(true)}
-          onDeleteLine={handleDeleteLine}
         />
       ),
     },

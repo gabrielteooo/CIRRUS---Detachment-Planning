@@ -24,7 +24,7 @@ function showDarkSuccess(messageApi: MessageInstance, content: string) {
 export function showAwaitingSparesToast(messageApi: MessageInstance, nsn: string) {
   showDarkSuccess(
     messageApi,
-    `Awaiting supply recorded. ${nsn} is fulfilled — monitor progress in Awaiting supply`,
+    `Awaiting supply recorded. ${nsn} — monitor progress in Awaiting supply`,
   );
 }
 
@@ -94,7 +94,7 @@ export function showPlanLineSaveToast(
     lineNeedsShortfallApproval(before) &&
     !lineNeedsShortfallApproval(after)
   ) {
-    showAwaitingSparesToast(messageApi, after.nsn);
+    showShortfallResolutionToast(messageApi, after.nsn);
     return;
   }
 

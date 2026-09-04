@@ -4,7 +4,7 @@ import dayjs from 'dayjs';
 import { getMpnForNsn } from '../../data/lSeriesTemplate';
 import type { Platform } from '../../types/detachment';
 import type { ComponentCategory, PlanLine } from '../../types/planLine';
-import { getDeviationDelta, getDisplayIssuedQty, getGroupAvailableQty, getShortfallDelta } from '../../types/planLine';
+import { getDeviationDelta, getDisplayIssuedQty, getGroupAvailableQty, getShortfallDelta, canIssueLine } from '../../types/planLine';
 import FulfillmentStatusTags from './FulfillmentStatusTags';
 import LineStatusTags from './LineStatusTags';
 import { formatDate } from '../../utils/planUtils';
@@ -351,17 +351,23 @@ export function getToBringColumn<T extends PlanLine>(lines: PlanLine[] = []): Co
 export function getIssuedColumnLinkRenderer(
   onEditIssued: (line: PlanLine) => void,
 ): NonNullable<ColumnType<PlanLine>['render']> {
-  return (_: unknown, record: PlanLine) => (
-    <Button
-      type="link"
-      size="small"
-      className="issued-qty-link"
-      style={{ padding: 0 }}
-      onClick={() => onEditIssued(record)}
-    >
-      {getDisplayIssuedQty(record)}
-    </Button>
-  );
+  return (_: unknown, record: PlanLine) => {
+    const issuedQty = getDisplayIssuedQty(record);
+    if (!canIssueLine(record)) {
+      return issuedQty;
+    }
+    return (
+      <Button
+        type="link"
+        size="small"
+        className="issued-qty-link"
+        style={{ padding: 0 }}
+        onClick={() => onEditIssued(record)}
+      >
+        {issuedQty}
+      </Button>
+    );
+  };
 }
 
 export function getIssuedColumn<T extends PlanLine>(
@@ -853,7 +859,6 @@ export function computeWorkQueueTableScrollX(
     TO_BRING_HUG_COLUMN_WIDTH,
     WAREHOUSE_HUG_COLUMN_WIDTH,
     ISSUED_HUG_COLUMN_WIDTH,
-    FULFILLMENT_COLUMN_WIDTH,
     STATUS_COLUMN_WIDTH,
     SUMMARY_SEVENTH_COLUMN_WIDTH,
     SUMMARY_EDIT_COLUMN_WIDTH,

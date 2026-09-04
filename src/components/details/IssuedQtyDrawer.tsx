@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { Alert, Button, Drawer, Form, InputNumber, Typography } from 'antd';
 import type { PlanLine } from '../../types/planLine';
 import {
+  canIssueLine,
   getDisplayIssuedQty,
   getGroupAvailableQty,
   isAutoIssuedLine,
@@ -36,7 +37,8 @@ export default function IssuedQtyDrawer({
   const autoIssued = isAutoIssuedLine(line);
   const ocApproval = needsOcApprovalForIssue(line);
   const warehouse = getGroupAvailableQty(line);
-  const readOnly = viewOnly || autoIssued;
+  const shortfallBlocksIssue = !canIssueLine(line);
+  const readOnly = viewOnly || autoIssued || shortfallBlocksIssue;
 
   const handleSave = async () => {
     if (readOnly) {
@@ -93,7 +95,21 @@ export default function IssuedQtyDrawer({
         />
       )}
 
-      {ocApproval && !autoIssued && (
+      {shortfallBlocksIssue && (
+        <Alert
+          type="warning"
+          showIcon
+          style={{ marginBottom: 16 }}
+          message="Issue not available"
+          description={
+            line.shortfallActions.length === 0
+              ? 'Resolve the warehouse shortfall before goods issue — stock must cover to-bring qty.'
+              : 'Seek offline approval for the shortfall resolution before goods issue.'
+          }
+        />
+      )}
+
+      {ocApproval && !autoIssued && !shortfallBlocksIssue && (
         <Alert
           type="warning"
           showIcon

@@ -9,7 +9,7 @@ import {
   getRequiredColumn,
   getToBringColumn,
   getIssuedColumn,
-  getFulfillmentStatusColumns,
+  getStatusColumn,
   getAvailableColumn,
   getAvailableColumnLinkRenderer,
   getMrpControllerColumn,
@@ -31,7 +31,6 @@ interface WorkQueueTabProps {
   viewOnly: boolean;
   onEditLine: (line: PlanLine) => void;
   onViewInventory: (line: PlanLine) => void;
-  onEditIssued?: (line: PlanLine) => void;
   onViewNsn: (line: PlanLine) => void;
 }
 
@@ -42,7 +41,6 @@ export default function WorkQueueTab({
   viewOnly,
   onEditLine,
   onViewInventory,
-  onEditIssued,
   onViewNsn,
 }: WorkQueueTabProps) {
   const [columnVisibility, setColumnVisibility] = useState<WorkQueueColumnVisibility>(
@@ -67,8 +65,8 @@ export default function WorkQueueTab({
       getAvailableColumn<PlanLine>(getAvailableColumnLinkRenderer(onViewInventory), {
         lines: queueLines,
       }),
-      getIssuedColumn<PlanLine>(queueLines, onEditIssued),
-      ...getFulfillmentStatusColumns<PlanLine>(),
+      getIssuedColumn<PlanLine>(queueLines),
+      getStatusColumn<PlanLine>(),
       getSummaryShortfallDeltaColumn<PlanLine>(),
       getSummaryEditColumn<PlanLine>(viewOnly, onEditLine, (line) =>
         isPolLine(line) ? 'Edit' : getLineActionLabel(line),
@@ -105,8 +103,8 @@ export default function WorkQueueTab({
     <div>
       <div className="lseries-table-toolbar">
         <Typography.Paragraph type="secondary" style={{ marginBottom: 0, flex: 1 }}>
-          These items have unresolved shortfalls. Record a resolution — awaiting supply is fulfilled
-          without approval; accept shortfall and cannibalise move to the Approval pack.
+          Unresolved shortfalls — record a resolution. **Awaiting supply** moves to the Awaiting
+          supply tab; **accept** and **cannibalise** move to the Approval pack.
         </Typography.Paragraph>
         <CustomizeColumnsButton
           options={WORK_QUEUE_COLUMN_OPTIONS}

@@ -1,4 +1,3 @@
-import { buildInterchangeableDemoLine } from './interchangeableLines';
 import { mockMrpController } from './mrpController';
 import type { Platform, PlatformPlan } from '../types/detachment';
 import type { LSeriesRecord } from '../types/lSeries';
@@ -395,42 +394,194 @@ function buildAsRequiredDemoLine(
   };
 }
 
-/** Optional L-series lines (required = 0, tagged AR) for demo. */
+/** Optional L-series lines (required = 0) for demo — two LRU as-required examples. */
 function applyFalconAsRequiredDemo(planId: string, lines: PlanLine[]): PlanLine[] {
   const asRequiredLines = [
     buildAsRequiredDemoLine(planId, 1, {
-      nsn: '1560-01-303',
-      mpn: 'MPN-SAFE-08',
-      description: 'Arming Safety Pin Kit, Flight Line',
-      category: 'Consumable',
-      availableQty: 12,
+      nsn: '1560-01-301',
+      mpn: 'MPN-NVG-01',
+      description: 'NVG Mounting Bracket, Cockpit (as required)',
+      category: 'LRU',
+      availableQty: 4,
       toBringQty: 0,
       issuedQty: 0,
-      remarks: 'Optional — bring if exercise arm/de-arm cycle requires',
+      remarks: 'Optional — bring if night-flying sorties are scheduled',
     }),
     buildAsRequiredDemoLine(planId, 2, {
-      nsn: '1560-01-304',
-      mpn: 'MPN-LUBE-22',
-      description: 'Hydraulic Fluid Servicing Kit',
-      category: 'Consumable',
+      nsn: '1560-01-302',
+      mpn: 'MPN-EGT-02',
+      description: 'EGT Harness Test Adapter (as required)',
+      category: 'LRU',
       availableQty: 6,
       toBringQty: 2,
-      issuedQty: 0,
-      remarks: 'Auto-issued — warehouse exceeds to-bring',
-    }),
-    buildAsRequiredDemoLine(planId, 3, {
-      nsn: '1560-01-306',
-      mpn: 'MPN-FUEL-09',
-      description: 'Single-Point Refueling Adapter',
-      category: 'LRU',
-      availableQty: 2,
-      toBringQty: 2,
-      issuedQty: 1,
-      remarks: 'OC approval — partial manual issue',
+      issuedQty: 2,
+      remarks: 'Optional spare committed and issued for deployment check',
     }),
   ];
 
   return [...lines, ...asRequiredLines];
+}
+
+function patchDemoLine(
+  lines: PlanLine[],
+  nsn: string,
+  updates: Partial<PlanLine> & { availableQty?: number },
+): void {
+  const idx = lines.findIndex((l) => l.nsn === nsn);
+  if (idx < 0) return;
+
+  const line = lines[idx];
+  const availableQty = updates.availableQty ?? line.availableQty;
+  const category = line.componentCategory;
+
+  lines[idx] = {
+    ...line,
+    ...updates,
+    inventory:
+      updates.inventory ??
+      buildInventory(line.nsn, line.description, availableQty, category),
+  };
+}
+
+/** Mark a line fulfilled (warehouse covers to-bring; auto-issue on sync). */
+function fulfillDemoLine(line: PlanLine, remarks?: string): PlanLine {
+  const toBringQty = line.toBringQty > 0 ? line.toBringQty : line.requiredQty;
+  const surplus = Math.max(10, Math.ceil(toBringQty * 0.2));
+  // Auto-issue consumes to-bring from warehouse — leave enough stock that post-sync
+  // warehouse still covers to-bring (otherwise fulfilled lines appear as shortfalls).
+  const availableQty = toBringQty * 2 + surplus;
+
+  return {
+    ...line,
+    toBringQty,
+    availableQty,
+    issuedQty: 0,
+    shortfallActions: [],
+    offlineApproval: undefined,
+    deviationRemarks: undefined,
+    inventory: buildInventory(line.nsn, line.description, availableQty, line.componentCategory),
+    remarks: remarks ?? line.remarks ?? 'Demo — fulfilled for validation',
+  };
+}
+
+/** All POL and consumables fulfilled for demo. */
+function applyFalconConsumablePolBaseline(lines: PlanLine[]): PlanLine[] {
+  return lines.map((line) => {
+    if (line.componentCategory === 'POL') {
+      return fulfillDemoLine(line, 'Demo — POL fulfilled for validation');
+    }
+
+    if (line.componentCategory === 'Consumable') {
+      return fulfillDemoLine(line, 'Demo — consumable fulfilled for validation');
+    }
+
+    return line;
+  });
+}
+
+/**
+ * Exercise Falcon 2026 (plan-001) validation scenario:
+ * - 4 unresolved shortfalls (Action required): 3 LRU + 1 consumable
+ * - All consumables and POL fulfilled
+ * - 2 LRU as-required examples
+ * - 5 LRU low-volume spares (OC / issue workflow)
+ * - 2 LRU fulfilled with warehouse > to-bring (auto-issue)
+ */
+function applyFalconValidationScenario(lines: PlanLine[]): PlanLine[] {
+  let result = applyFalconConsumablePolBaseline(lines);
+
+  const patch = (nsn: string, updates: Partial<PlanLine> & { availableQty?: number }) => {
+    patchDemoLine(result, nsn, {
+      shortfallActions: [],
+      offlineApproval: undefined,
+      deviationRemarks: undefined,
+      deviationReason: undefined,
+      issuedQty: 0,
+      ...updates,
+    });
+  };
+
+  // —— 4 unresolved shortfalls (no resolution recorded) ——
+  patch('1560-01-2355', {
+    availableQty: 2,
+    toBringQty: 8,
+    remarks: 'Demo — unresolved shortfall (radar LRU)',
+  });
+  patch('1560-01-2421', {
+    availableQty: 0,
+    toBringQty: 3,
+    remarks: 'Demo — unresolved shortfall (hydraulic pump)',
+  });
+  patch('1560-01-2443', {
+    availableQty: 2,
+    toBringQty: 6,
+    remarks: 'Demo — unresolved shortfall (wheel and brake assembly)',
+  });
+  patch('7045-18-2639', {
+    availableQty: 22,
+    toBringQty: 108,
+    remarks: 'Demo — unresolved shortfall (hydraulic filter element)',
+  });
+
+  // —— 5 low-volume LRU spares (warehouse ≤ 2 or warehouse = to-bring; not shortfall) ——
+  patch('1560-01-2388', {
+    availableQty: 1,
+    toBringQty: 1,
+    remarks: 'Demo — low volume (WH 1)',
+  });
+  patch('1560-01-2399', {
+    availableQty: 2,
+    toBringQty: 2,
+    remarks: 'Demo — low volume (full pool commit, WH 2)',
+  });
+  patch('1560-01-2377', {
+    availableQty: 2,
+    toBringQty: 2,
+    remarks: 'Demo — low volume (full pool commit)',
+  });
+  patch('1560-01-2487', {
+    availableQty: 1,
+    toBringQty: 1,
+    remarks: 'Demo — low volume (WH 1)',
+  });
+  patch('1560-01-2410', {
+    availableQty: 2,
+    toBringQty: 1,
+    remarks: 'Demo — low volume (WH 2, partial pool)',
+  });
+
+  // —— 2 fulfilled LRU lines with warehouse > to-bring (auto-issue on sync) ——
+  patch('1560-01-2322', {
+    availableQty: 5,
+    toBringQty: 1,
+    remarks: 'Demo — surplus warehouse, auto-issued',
+  });
+  patch('1560-01-2344', {
+    availableQty: 6,
+    toBringQty: 1,
+    remarks: 'Demo — surplus warehouse, auto-issued',
+  });
+
+  // Remaining standard LRU — healthy stock, auto-fulfilled where warehouse exceeds to-bring
+  for (const nsn of [
+    '1560-01-2311',
+    '1560-01-2333',
+    '1560-01-2366',
+    '1560-01-2432',
+    '1560-01-2454',
+    '1560-01-2465',
+    '1560-01-2476',
+  ]) {
+    const line = result.find((l) => l.nsn === nsn);
+    if (!line || line.requiredQty <= 0) continue;
+    patch(nsn, {
+      availableQty: line.requiredQty * 2 + 4,
+      toBringQty: line.requiredQty,
+      remarks: '',
+    });
+  }
+
+  return result;
 }
 
 /** Demo scenario overlays for Exercise Falcon 2026 (plan-001). */
@@ -439,92 +590,7 @@ export function applyDemoScenario(planId: string, lines: PlanLine[]): PlanLine[]
 
   lines = applyFalconPolDemo(planId, lines);
   lines = applyFalconAsRequiredDemo(planId, lines);
-
-  const patch = (nsn: string, updates: Partial<PlanLine>) => {
-    const idx = lines.findIndex((l) => l.nsn === nsn);
-    if (idx >= 0) lines[idx] = { ...lines[idx], ...updates };
-  };
-
-  patch('1560-01-2421', {
-    availableQty: 0,
-    toBringQty: 3,
-    inventory: [
-      { type: 'Main', nsn: '1560-01-2421', description: 'Hydraulic Pump', location: 'WH-A / Rack 3', qty: 1, status: 'In WH' },
-      { type: 'Alt', nsn: '1560-01-2421-ALT', description: 'Hydraulic Pump (alternate)', location: 'WH-B / Rack 1', qty: 0, status: 'Blocked' },
-    ],
-    shortfallActions: [
-      { type: 'wait', qty: 1, needByDate: '2026-03-01', remarks: 'Expedite repair — PO1234567 expected end Feb', approved: false },
-      { type: 'cannibalise', qty: 1, tailNumber: '987', workCentreComments: 'Confirmed with Hangar 3 MRO', confirmedWithWorkCentre: true, approved: false },
-      { type: 'cannibalise', qty: 1, tailNumber: '654', workCentreComments: 'Secondary source aircraft', confirmedWithWorkCentre: true, approved: false },
-    ],
-  });
-
-  patch('1560-01-2311', {
-    availableQty: 0,
-    toBringQty: 1,
-    inventory: [
-      { type: 'Main', nsn: '1560-01-2311', description: 'Engine Fuel Pump', location: 'WH-A / Rack 7', qty: 0, status: 'QI' },
-    ],
-    shortfallActions: [
-      {
-        type: 'accept',
-        qty: 1,
-        remarks: 'Accept operational risk — reduced sortie rate agreed',
-        approved: false,
-      },
-    ],
-  });
-
-  patch('1560-01-2355', {
-    availableQty: 0,
-    inventory: [
-      { type: 'Main', nsn: '1560-01-2355', description: 'Radar Line-Replaceable Unit', location: 'WH-D / Secure', qty: 0, status: 'QIT' },
-    ],
-    shortfallActions: [],
-  });
-
-  patch('1597-36-2822', {
-    availableQty: 3,
-    toBringQty: 20,
-    shortfallActions: [
-      { type: 'wait', qty: 2, needByDate: '2026-03-01', remarks: 'Awaiting filter element delivery from supplier', approved: true },
-    ],
-    offlineApproval: {
-      approverName: 'LTC Tan Wei Ming',
-      approvedDate: '2026-02-12',
-      meeting: 'Detachment readiness board',
-    },
-  });
-
-  patch('5831-04-7296', {
-    toBringQty: lines.find((l) => l.nsn === '5831-04-7296')?.requiredQty ?? 0,
-    remarks: 'Fuel uplift confirmed with host nation',
-  });
-
-  patch('8316-27-4905', {
-    toBringQty: lines.find((l) => l.nsn === '8316-27-4905')?.requiredQty ?? 0,
-    remarks: 'Grease kits staged at deployment pack line',
-  });
-
-  patch('3950-74-8216', {
-    remarks: 'Include in deployment POL kit',
-  });
-
-  patch('1597-36-2840', {
-    remarks: 'Include MSDS folder',
-  });
-
-  patch('1560-01-2344', {
-    availableQty: 2,
-    toBringQty: 2,
-    deviationReason: 'Carry one spare generator beyond L-series allowance for exercise redundancy',
-    inventory: buildInventory('1560-01-2344', 'Main Generator', 2),
-  });
-
-  const starterGenIdx = lines.findIndex((l) => l.nsn === '1560-01-2333');
-  if (starterGenIdx >= 0) {
-    lines[starterGenIdx] = buildInterchangeableDemoLine(lines[starterGenIdx]);
-  }
+  lines = applyFalconValidationScenario(lines);
 
   return lines;
 }
@@ -535,7 +601,8 @@ export function getDefaultPlanLinesForPlan(
 ): PlanLine[] {
   const lines = buildPlanLinesFromTemplate(plan, lSeriesRecords);
   const withDemo = applyDemoScenario(plan.id, lines);
+  const synced = syncPlanLinesIssuance(withDemo);
   return ensureLegacyApprovalSnapshots(
-    syncPlanLinesIssuance(ensureFulfilledExcessInventory(withDemo)),
+    plan.id === 'plan-001' ? synced : syncPlanLinesIssuance(ensureFulfilledExcessInventory(withDemo)),
   );
 }

@@ -198,12 +198,7 @@ When warehouse exceeds to-bring, ES **reserves** stock (prototype may auto-issue
 
 ### 6.5.1 Action required (work queue)
 
-Unresolved **shortfalls** only — lines where `toBring > warehouse` and no resolution recorded. Includes:
-
-- L-series-aligned shortfalls (`toBring = required`)
-- **Upward deviation** shortfalls (`toBring > required`)
-
-Excludes downward deviation shortfalls and **Add NSN** lines (deviation workflow on All components).
+Unresolved **shortfalls** in the planner workflow — LRU and Consumable lines where `toBring > warehouse` and no resolution recorded. Includes L-series-aligned and upward-deviation shortfalls. Excludes POL, downward-deviation gaps, add-NSN, and uncommitted as-required lines.
 
 ### 6.5.2 Plan approval status
 
@@ -234,10 +229,12 @@ Planner may select **one or more**; all selected actions share one offline appro
 | Action | Required fields |
 |--------|-----------------|
 | **Accept shortfall** | Risk / remarks |
-| **Wait** (expedite repair/order) | Component from EDD repair list, need-by-date |
+| **Wait** (expedite repair/order) | Component from EDD repair list, need-by-date — moves to **Awaiting supply** (no Approval pack) |
 | **Cannibalise** | Aircraft tail #, work centre comments, confirmed with work centre |
 
-After offline meeting, planner records **Offline approval** in CIRRUS.
+**Accept** and **Cannibalise** resolutions move to the **Approval pack** for offline CO sign-off before fulfillment. **Wait-only** resolutions skip Approval pack and appear in **Awaiting supply** immediately. Goods issue for accept/cannibalise shortfalls remains blocked until approval is recorded.
+
+**Awaiting supply** — line remains **Shortfall** in planning status while stock is still insufficient; the wait resolution is recorded and the line is monitored until supply arrives.
 
 ### 6.8 Optional L-series lines (“As required”)
 
@@ -482,7 +479,7 @@ See `src/types/detachment.ts` and `src/types/planLine.ts` for full interfaces.
 
 | Plan ID | Name | Notes |
 |---------|------|-------|
-| `plan-001` | Exercise Falcon 2026 | F-16 200 hrs; shortfalls, deviations, cannibalisation — **primary demo** |
+| `plan-001` | Exercise Falcon 2026 | F-16 200 hrs; **validation scenario** — 4 shortfalls (3 LRU + 1 consumable), all other consumables/POL fulfilled, 2 LRU as-required, 5 low-volume LRU, 2 auto-issued surplus LRU |
 | `plan-002` | Operation Lift 2026 | CH-47 draft, high shortfall count |
 | `plan-003` | Detachment Alpha — F-16 | Approved open-dated example |
 | `plan-004`–`plan-012` | Various | Mix of past approved plans for Past tab grid |

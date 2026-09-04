@@ -110,8 +110,8 @@ export default function AwaitingSparesTab({
     <div>
       <div className="lseries-table-toolbar">
         <Typography.Paragraph type="secondary" style={{ marginBottom: 0, flex: 1 }}>
-          These lines are fulfilled with an awaiting supply resolution and do not require approval.
-          Monitor supply progress here — change the resolution if plans shift.
+          These lines have an awaiting supply resolution and do not require approval. Monitor supply
+          progress here — change the resolution if plans shift.
         </Typography.Paragraph>
         <CustomizeColumnsButton
           options={WORK_QUEUE_COLUMN_OPTIONS}

@@ -6,7 +6,6 @@ import {
   Empty,
   Form,
   Input,
-  Segmented,
   Space,
   Table,
   Typography,
@@ -20,7 +19,6 @@ import {
   getApprovalPackLines,
 } from '../../types/planLine';
 import type { Platform } from '../../types/detachment';
-import ApprovalPackPresenterView from './ApprovalPackPresenterView';
 import {
   getNsnMpnDescriptionColumns,
   getPlatformVariantColumn,
@@ -47,8 +45,6 @@ interface ApprovalPackTabProps {
 
 const ACTION_COLUMN_WIDTH = 120;
 
-type ApprovalPackViewMode = 'table' | 'presenter';
-
 export default function ApprovalPackTab({
   lines,
   platform,
@@ -65,7 +61,6 @@ export default function ApprovalPackTab({
   const [approvedDate, setApprovedDate] = useState<Dayjs | null>(null);
   const [showSignoffValidation, setShowSignoffValidation] = useState(false);
   const [selectedLineIds, setSelectedLineIds] = useState<Set<string>>(new Set());
-  const [viewMode, setViewMode] = useState<ApprovalPackViewMode>('table');
 
   const { shortfalls, deviations } = useMemo(
     () => getApprovalPackLines(lines, 'pending'),
@@ -218,22 +213,10 @@ export default function ApprovalPackTab({
 
   return (
     <div className="approval-pack-tab">
-      <div className="approval-pack-tab-header">
-        <Typography.Paragraph type="secondary" className="approval-pack-tab-intro">
-          Select the lines to approve, enter approving officer and date of approval, then save.
-          Unchecked lines remain in the approval pack.
-        </Typography.Paragraph>
-        <div className="approval-pack-view-toggle">
-          <Segmented<ApprovalPackViewMode>
-            value={viewMode}
-            onChange={setViewMode}
-            options={[
-              { label: 'Table view', value: 'table' },
-              { label: 'Presenter view', value: 'presenter' },
-            ]}
-          />
-        </div>
-      </div>
+      <Typography.Paragraph type="secondary" className="approval-pack-tab-intro">
+        Select the lines to approve, enter approving officer and date of approval, then approve.
+        Unchecked lines remain in the approval pack.
+      </Typography.Paragraph>
 
       <div
         className={`approval-pack-signoff-bar${
@@ -293,64 +276,51 @@ export default function ApprovalPackTab({
               indeterminate={someSelected}
               onChange={(event) => handleSelectAll(event.target.checked)}
             >
-              Select all to approve
+              Select all
             </Checkbox>
             <Button type="primary" onClick={handleSave} disabled={selectedLineIds.size === 0}>
-              Save
+              Approve
             </Button>
           </div>
         )}
       </div>
 
-      {viewMode === 'presenter' ? (
-        <ApprovalPackPresenterView
-          shortfalls={shortfalls}
-          deviations={deviations}
-          viewOnly={viewOnly}
-          selectedLineIds={selectedLineIds}
-          onSelectLine={handleRowSelect}
-          onEditLine={onEditLine}
-        />
-      ) : (
-        <>
-          {shortfalls.length > 0 && (
-            <section className="approval-pack-tab-section">
-              <Typography.Title level={5} className="approval-pack-section-title">
-                Shortfalls ({shortfalls.length})
-              </Typography.Title>
-              <div className="detachment-table-container">
-                <Table
-                  dataSource={shortfalls}
-                  columns={shortfallColumns}
-                  rowKey="id"
-                  pagination={false}
-                  size="small"
-                  tableLayout={DETACHMENT_TABLE_LAYOUT}
-                  scroll={{ x: APPROVAL_PACK_SHORTFALL_SCROLL_X + ACTION_COLUMN_WIDTH }}
-                />
-              </div>
-            </section>
-          )}
+      {shortfalls.length > 0 && (
+        <section className="approval-pack-tab-section">
+          <Typography.Title level={5} className="approval-pack-section-title">
+            Shortfalls ({shortfalls.length})
+          </Typography.Title>
+          <div className="detachment-table-container">
+            <Table
+              dataSource={shortfalls}
+              columns={shortfallColumns}
+              rowKey="id"
+              pagination={false}
+              size="small"
+              tableLayout={DETACHMENT_TABLE_LAYOUT}
+              scroll={{ x: APPROVAL_PACK_SHORTFALL_SCROLL_X + ACTION_COLUMN_WIDTH }}
+            />
+          </div>
+        </section>
+      )}
 
-          {deviations.length > 0 && (
-            <section className="approval-pack-tab-section">
-              <Typography.Title level={5} className="approval-pack-section-title">
-                Additional requirements ({deviations.length})
-              </Typography.Title>
-              <div className="detachment-table-container">
-                <Table
-                  dataSource={deviations}
-                  columns={deviationColumns}
-                  rowKey="id"
-                  pagination={false}
-                  size="small"
-                  tableLayout={DETACHMENT_TABLE_LAYOUT}
-                  scroll={{ x: APPROVAL_PACK_DEVIATION_SCROLL_X + ACTION_COLUMN_WIDTH }}
-                />
-              </div>
-            </section>
-          )}
-        </>
+      {deviations.length > 0 && (
+        <section className="approval-pack-tab-section">
+          <Typography.Title level={5} className="approval-pack-section-title">
+            Additional requirements ({deviations.length})
+          </Typography.Title>
+          <div className="detachment-table-container">
+            <Table
+              dataSource={deviations}
+              columns={deviationColumns}
+              rowKey="id"
+              pagination={false}
+              size="small"
+              tableLayout={DETACHMENT_TABLE_LAYOUT}
+              scroll={{ x: APPROVAL_PACK_DEVIATION_SCROLL_X + ACTION_COLUMN_WIDTH }}
+            />
+          </div>
+        </section>
       )}
     </div>
   );

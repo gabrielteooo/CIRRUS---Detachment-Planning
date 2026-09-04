@@ -348,20 +348,21 @@ export default function EditLineDrawer({
   const showShortfallPanel = hasShortfallCondition(linePreview);
   const showDeviationFields = hasDeviationCondition(linePreview);
   const acceptShortfallDisabled = showShortfallPanel && !canAcceptShortfall(linePreview);
-  const deviationUp =
-    line.isAddedNsn || (showDeviationFields && currentToBringResolved > line.requiredQty);
+  const upwardDeviation =
+    !line.isAddedNsn && showDeviationFields && currentToBringResolved > line.requiredQty;
+  const toBringMin = line.isAddedNsn ? line.requiredQty + 1 : 0;
+  const deviationUp = line.isAddedNsn || upwardDeviation;
   const deviationDown =
     !line.isAddedNsn && showDeviationFields && currentToBringResolved < line.requiredQty;
   const showDeviationHint = isLineFulfilled(line) && canDeviateQty(line);
+  const removingDeviation =
+    !line.isAddedNsn &&
+    hasDeviationCondition(line) &&
+    !hasDeviationCondition(linePreview);
   const revertingToFulfilled =
     !isLineFulfilled(line) &&
     !line.isAddedNsn &&
     isLineFulfilled(previewLine(line, currentToBringResolved));
-  const toBringMin = line.isAddedNsn
-    ? line.requiredQty + 1
-    : deviationUp
-      ? line.requiredQty + 1
-      : 0;
 
   const handleSave = async () => {
     try {
@@ -535,6 +536,12 @@ export default function EditLineDrawer({
           </Form.Item>
         )}
 
+        {removingDeviation && !revertingToFulfilled && (
+          <Typography.Text type="secondary">
+            To-bring matches the L-series requirement — the deviation will be removed when saved.
+          </Typography.Text>
+        )}
+
         {revertingToFulfilled && (
           <Typography.Text type="secondary">
             To-bring matches required and available stock — this line will be fulfilled when saved.
@@ -549,7 +556,9 @@ export default function EditLineDrawer({
             <Typography.Text type="secondary" className="shortfall-resolution-subtitle">
               To-bring exceeds available stock — resolve the gap of{' '}
               <Typography.Text strong>{shortfallQty}</Typography.Text>
-              {showDeviationFields ? ' and record the deviation below.' : ' before proceeding.'}
+              {showDeviationFields
+                ? `. You can reduce to-bring to ${line.requiredQty} to align with the L-series requirement and remove the deviation, or record the deviation below.`
+                : ' before proceeding.'}
             </Typography.Text>
 
             <Form.Item name="shortfallActionTypes">
@@ -725,9 +734,9 @@ export default function EditLineDrawer({
               Record a deviation
             </Typography.Text>
             <Typography.Text type="secondary">
-              Available stock ({groupAvailable}) covers to-bring. Adjust above or below required (
-              {line.requiredQty}) to record a deviation — if to-bring exceeds available the line
-              also becomes a shortfall.
+              Available stock ({groupAvailable}) covers to-bring. Set to-bring to required (
+              {line.requiredQty}) to remove a deviation, or adjust above or below required to record
+              one — if to-bring exceeds available the line also becomes a shortfall.
             </Typography.Text>
           </div>
         )}
